@@ -6,7 +6,7 @@
 import { Track } from '../types';
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://88b2so-103-35-189-138.ru.tuna.am';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://rmoopo-103-35-189-138.ru.tuna.am';
 
 interface SearchResponse {
     results: Track[];
