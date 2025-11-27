@@ -14,6 +14,7 @@ interface PlayerContextType {
   queue: Track[];
   downloadedTracks: Set<string>;
   isDownloading: string | null;
+  isShuffle: boolean;
 
   // Действия
   playTrack: (track: Track, newQueue?: Track[]) => void;
@@ -25,6 +26,7 @@ interface PlayerContextType {
   createPlaylist: (name: string, coverFile?: File) => void;
   addToPlaylist: (playlistId: string, track: Track) => void;
   toggleRepeat: () => void;
+  toggleShuffle: () => void;
   downloadTrack: (track: Track) => void;
   removeDownloadedTrack: (trackId: string) => void;
 
@@ -61,6 +63,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('none');
+  const [isShuffle, setIsShuffle] = useState(false);
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
 
   // Search State
@@ -247,6 +250,14 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const nextTrack = () => {
     if (!currentTrack || queue.length === 0) return;
+
+    if (isShuffle) {
+      // Random track logic
+      const randomIndex = Math.floor(Math.random() * queue.length);
+      playTrack(queue[randomIndex]);
+      return;
+    }
+
     const currentIndex = queue.findIndex(t => t.id === currentTrack.id);
 
     if (currentIndex < queue.length - 1) {
@@ -330,6 +341,8 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     });
   };
 
+  const toggleShuffle = () => setIsShuffle(!isShuffle);
+
   const downloadTrack = async (track: Track) => {
     if (downloadedTracks.has(track.id) || isDownloading) return;
 
@@ -400,6 +413,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       queue,
       downloadedTracks,
       isDownloading,
+      isShuffle,
       playTrack,
       togglePlay,
       nextTrack,
@@ -409,8 +423,8 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       createPlaylist,
       addToPlaylist,
       toggleRepeat,
+      toggleShuffle,
       downloadTrack,
-
       removeDownloadedTrack,
       searchState,
       setSearchState,

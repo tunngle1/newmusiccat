@@ -147,6 +147,59 @@ const HomeView: React.FC = () => {
         </div>
       )}
 
+      {/* Genres Section - Only show when not searching */}
+      {!searchState.query.trim() && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-gray-100">Жанры</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { name: 'Рок', query: 'rock', gradient: 'from-red-500 to-orange-500' },
+              { name: 'Поп', query: 'pop', gradient: 'from-pink-500 to-purple-500' },
+              { name: 'Хип-хоп', query: 'hip hop', gradient: 'from-yellow-500 to-green-500' },
+              { name: 'Электроника', query: 'electronic', gradient: 'from-blue-500 to-cyan-500' },
+              { name: 'Релакс', query: 'relax', gradient: 'from-green-500 to-teal-500' },
+              { name: 'Тренировки', query: 'workout', gradient: 'from-orange-500 to-red-600' },
+            ].map((genre) => (
+              <button
+                key={genre.name}
+                onClick={() => {
+                  setSearchState(prev => ({ ...prev, query: genre.query }));
+                  hapticFeedback.light();
+                }}
+                className={`p-4 rounded-xl bg-gradient-to-br ${genre.gradient} text-white font-semibold shadow-lg hover:scale-105 transition-transform active:scale-95`}
+              >
+                {genre.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Artist Recommendations - Only show when playing and not searching */}
+      {!searchState.query.trim() && currentTrack && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-gray-100">Рекомендации</h3>
+          <button
+            onClick={() => {
+              setSearchState(prev => ({ ...prev, query: currentTrack.artist }));
+              hapticFeedback.light();
+            }}
+            className="w-full p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors flex items-center space-x-4"
+          >
+            <img
+              src={currentTrack.coverUrl}
+              alt={currentTrack.artist}
+              className="w-12 h-12 rounded-lg object-cover"
+            />
+            <div className="flex-1 text-left">
+              <p className="text-sm text-gray-400">Еще от</p>
+              <p className="text-white font-semibold">{currentTrack.artist}</p>
+            </div>
+            <div className="text-blue-400">→</div>
+          </button>
+        </div>
+      )}
+
       {/* Track List */}
       <div>
         <h3 className="text-lg font-semibold mb-4 text-gray-100">
