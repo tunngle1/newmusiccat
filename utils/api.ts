@@ -6,7 +6,7 @@
 import { Track } from '../types';
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://texture-reduction-eclipse-convenience.trycloudflare.com';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://flat-chemical-authors-pay.trycloudflare.com';
 
 interface SearchResponse {
     results: Track[];
