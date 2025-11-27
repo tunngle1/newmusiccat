@@ -81,7 +81,15 @@ class HitmoParser:
                             
                         # Cover
                         image = None
-                        if cover_el:
+                        
+                        # Try to get high quality cover from iTunes
+                        try:
+                            image = self._get_itunes_cover(artist, title)
+                        except Exception as e:
+                            print(f"iTunes cover error: {e}")
+                            
+                        # Fallback to Hitmo cover if iTunes failed
+                        if not image and cover_el:
                             style = cover_el.get('style', '')
                             # Extract url('...') from style
                             match = re.search(r"url\(['\"]?(.*?)['\"]?\)", style)
@@ -110,6 +118,32 @@ class HitmoParser:
         except Exception as e:
             print(f"Search error: {e}")
             return []
+
+    def _get_itunes_cover(self, artist: str, title: str) -> Optional[str]:
+        """
+        Get high quality cover from iTunes API
+        """
+        try:
+            term = f"{artist} {title}"
+            params = {
+                'term': term,
+                'media': 'music',
+                'entity': 'song',
+                'limit': 1
+            }
+            
+            with httpx.Client(timeout=3.0) as client:
+                response = client.get("https://itunes.apple.com/search", params=params)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data['resultCount'] > 0:
+                        # Get artwork url and replace size with 600x600
+                        artwork = data['results'][0].get('artworkUrl100')
+                        if artwork:
+                            return artwork.replace('100x100bb', '600x600bb')
+            return None
+        except:
+            return None
 
     def close(self):
         pass

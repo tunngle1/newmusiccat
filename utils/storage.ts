@@ -1,6 +1,8 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Track } from '../types';
 
+import { Playlist } from '../types';
+
 interface MusicDB extends DBSchema {
     tracks: {
         key: string;
@@ -11,19 +13,32 @@ interface MusicDB extends DBSchema {
         };
         indexes: { 'by-date': number };
     };
+    playlists: {
+        key: string;
+        value: Playlist & {
+            createdAt: number;
+        };
+        indexes: { 'by-date': number };
+    };
 }
 
 const DB_NAME = 'tg-music-player-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 class StorageService {
     private dbPromise: Promise<IDBPDatabase<MusicDB>>;
 
     constructor() {
         this.dbPromise = openDB<MusicDB>(DB_NAME, DB_VERSION, {
-            upgrade(db) {
-                const trackStore = db.createObjectStore('tracks', { keyPath: 'id' });
-                trackStore.createIndex('by-date', 'savedAt');
+            upgrade(db, oldVersion, newVersion, transaction) {
+                if (oldVersion < 1) {
+                    const trackStore = db.createObjectStore('tracks', { keyPath: 'id' });
+                    trackStore.createIndex('by-date', 'savedAt');
+                }
+                if (oldVersion < 2) {
+                    const playlistStore = db.createObjectStore('playlists', { keyPath: 'id' });
+                    playlistStore.createIndex('by-date', 'createdAt');
+                }
             },
         });
     }
@@ -63,6 +78,34 @@ class StorageService {
         const db = await this.dbPromise;
         const key = await db.getKey('tracks', id);
         return !!key;
+    }
+
+    // Playlist methods
+
+    async savePlaylist(playlist: Playlist): Promise<void> {
+        const db = await this.dbPromise;
+        // Проверяем, существует ли уже плейлист, чтобы сохранить дату создания
+        const existing = await db.get('playlists', playlist.id);
+
+        await db.put('playlists', {
+            ...playlist,
+            createdAt: existing ? existing.createdAt : Date.now()
+        });
+    }
+
+    async getAllPlaylists(): Promise<Playlist[]> {
+        const db = await this.dbPromise;
+        const playlists = await db.getAllFromIndex('playlists', 'by-date');
+        return playlists.map(({ createdAt, ...playlist }) => playlist);
+    }
+
+    async deletePlaylist(id: string): Promise<void> {
+        const db = await this.dbPromise;
+        await db.delete('playlists', id);
+    }
+
+    async updatePlaylist(playlist: Playlist): Promise<void> {
+        await this.savePlaylist(playlist);
     }
 }
 

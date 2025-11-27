@@ -84,15 +84,26 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Загрузка скачанных треков при старте
+  // Загрузка скачанных треков и плейлистов при старте
   useEffect(() => {
-    const loadDownloadedTracks = async () => {
+    const loadData = async () => {
+      // Загрузка треков
       const tracks = await storage.getAllTracks();
       const ids = new Set(tracks.map(t => t.id));
       setDownloadedTracks(ids);
-      // Опционально: добавить скачанные треки в общий список или отдельный плейлист
+
+      // Загрузка плейлистов
+      const savedPlaylists = await storage.getAllPlaylists();
+      if (savedPlaylists.length > 0) {
+        setPlaylists(prev => {
+          // Объединяем дефолтные и сохраненные, избегая дубликатов по ID
+          const defaultIds = new Set(INITIAL_PLAYLISTS.map(p => p.id));
+          const newPlaylists = savedPlaylists.filter(p => !defaultIds.has(p.id));
+          return [...INITIAL_PLAYLISTS, ...newPlaylists];
+        });
+      }
     };
-    loadDownloadedTracks();
+    loadData();
   }, []);
 
   // Инициализация аудио элемента
@@ -137,38 +148,58 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const playAudio = async () => {
       if (currentTrack && audioRef.current) {
         try {
+          // Сбрасываем состояние при смене трека, чтобы не показывать данные предыдущего
+          // Но только если это действительно новый трек (проверка по ID или src не поможет, так как мы еще не знаем src)
+          // Лучше делать это при установке нового src
+
           let src = currentTrack.audioUrl;
 
           // Проверяем, скачан ли трек
           if (downloadedTracks.has(currentTrack.id)) {
-            const savedTrack = await storage.getTrack(currentTrack.id);
-            if (savedTrack && savedTrack.audioBlob) {
-              src = URL.createObjectURL(savedTrack.audioBlob);
-              console.log("Playing from local storage:", currentTrack.title);
+            try {
+              const savedTrack = await storage.getTrack(currentTrack.id);
+              if (savedTrack && savedTrack.audioBlob) {
+                src = URL.createObjectURL(savedTrack.audioBlob);
+                console.log("Playing from local storage:", currentTrack.title);
 
-              // Если есть сохраненная обложка, обновляем её в текущем треке для отображения
-              if (savedTrack.coverBlob) {
-                const coverUrl = URL.createObjectURL(savedTrack.coverBlob);
-                // Временный хак: обновляем coverUrl в объекте currentTrack
-                // В идеале нужно иметь отдельное состояние для локальной обложки
-                currentTrack.coverUrl = coverUrl;
+                // Если есть сохраненная обложка, обновляем её в текущем треке для отображения
+                if (savedTrack.coverBlob) {
+                  const coverUrl = URL.createObjectURL(savedTrack.coverBlob);
+                  currentTrack.coverUrl = coverUrl;
+                }
               }
+            } catch (e) {
+              console.error("Error loading local track:", e);
+              // Fallback to network URL if local load fails
+              src = currentTrack.audioUrl;
             }
           }
 
           if (audioRef.current.src !== src) {
+            // Сбрасываем длительность пока грузится новый трек
+            setDuration(0);
+            setCurrentTime(0);
+
             // Освобождаем старый URL если это был blob
             if (audioRef.current.src.startsWith('blob:')) {
               URL.revokeObjectURL(audioRef.current.src);
             }
 
             audioRef.current.src = src;
+            audioRef.current.load(); // Явно загружаем новый источник
+
             if (isPlaying) {
-              await audioRef.current.play();
+              const playPromise = audioRef.current.play();
+              if (playPromise !== undefined) {
+                playPromise.catch(e => {
+                  console.error("Play error (auto-play):", e);
+                  // Если ошибка NotSupportedError, возможно blob битый или формат не тот
+                });
+              }
             }
           }
         } catch (e) {
-          console.error("Play error:", e);
+          console.error("Play setup error:", e);
         }
       }
     };
@@ -251,6 +282,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       trackIds: []
     };
     setPlaylists(prev => [...prev, newPlaylist]);
+    storage.savePlaylist(newPlaylist); // Сохраняем в БД
   };
 
   const addToPlaylist = (playlistId: string, track: Track) => {
@@ -265,7 +297,9 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     // 2. Добавляем ID трека в плейлист
     setPlaylists(prev => prev.map(pl => {
       if (pl.id === playlistId && !pl.trackIds.includes(track.id)) {
-        return { ...pl, trackIds: [...pl.trackIds, track.id] };
+        const updatedPlaylist = { ...pl, trackIds: [...pl.trackIds, track.id] };
+        storage.updatePlaylist(updatedPlaylist); // Обновляем в БД
+        return updatedPlaylist;
       }
       return pl;
     }));

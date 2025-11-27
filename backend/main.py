@@ -137,36 +137,55 @@ async def get_track(track_id: str):
 from fastapi.responses import StreamingResponse
 import httpx
 
+from fastapi import Request
+from starlette.background import BackgroundTask
+
 @app.get("/api/stream")
-async def stream_audio(url: str = Query(..., description="URL аудио файла")):
+async def stream_audio(request: Request, url: str = Query(..., description="URL аудио файла")):
     """
-    Проксирование аудио потока с правильными заголовками
+    Проксирование аудио потока с поддержкой Range requests
     """
     if not url:
         raise HTTPException(status_code=400, detail="URL is required")
     
-    # Декодируем URL если нужно, но FastAPI делает это автоматически
+    client = httpx.AsyncClient(follow_redirects=True)
     
-    async def iterfile():
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            # Добавляем заголовки, чтобы притвориться браузером на сайте Hitmo
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Referer': 'https://rus.hitmotop.com/',
-                'Range': 'bytes=0-'
-            }
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://rus.hitmotop.com/',
+    }
+    
+    range_header = request.headers.get("range")
+    if range_header:
+        headers['Range'] = range_header
+        
+    async def close_client():
+        await client.aclose()
+        
+    try:
+        req = client.build_request("GET", url, headers=headers)
+        r = await client.send(req, stream=True)
+        
+        response_headers = {
+            "Accept-Ranges": "bytes",
+        }
+        
+        if "content-length" in r.headers:
+            response_headers["Content-Length"] = r.headers["content-length"]
+        if "content-range" in r.headers:
+            response_headers["Content-Range"] = r.headers["content-range"]
             
-            try:
-                async with client.stream("GET", url, headers=headers) as r:
-                    r.raise_for_status()
-                    async for chunk in r.aiter_bytes():
-                        yield chunk
-            except Exception as e:
-                print(f"Error streaming audio: {e}")
-                # В стриминге сложно вернуть ошибку после начала, но попробуем
-                pass
-
-    return StreamingResponse(iterfile(), media_type="audio/mpeg")
+        return StreamingResponse(
+            r.aiter_bytes(),
+            status_code=r.status_code,
+            headers=response_headers,
+            media_type=r.headers.get("content-type"),
+            background=BackgroundTask(close_client)
+        )
+    except Exception as e:
+        await client.aclose()
+        print(f"Error streaming audio: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.on_event("shutdown")
 async def shutdown_event():
