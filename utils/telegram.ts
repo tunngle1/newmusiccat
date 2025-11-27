@@ -156,29 +156,6 @@ export const hideBackButton = () => {
 };
 
 /**
- * Тактильная обратная связь
- */
-export const hapticFeedback = {
-    light: () => getTelegramWebApp()?.HapticFeedback.impactOccurred('light'),
-    medium: () => getTelegramWebApp()?.HapticFeedback.impactOccurred('medium'),
-    heavy: () => getTelegramWebApp()?.HapticFeedback.impactOccurred('heavy'),
-    success: () => getTelegramWebApp()?.HapticFeedback.notificationOccurred('success'),
-    error: () => getTelegramWebApp()?.HapticFeedback.notificationOccurred('error'),
-    warning: () => getTelegramWebApp()?.HapticFeedback.notificationOccurred('warning'),
-    selection: () => getTelegramWebApp()?.HapticFeedback.selectionChanged(),
-};
-
-/**
- * Закрыть Mini App
- */
-export const closeTelegramWebApp = () => {
-    const webApp = getTelegramWebApp();
-    if (webApp) {
-        webApp.close();
-    }
-};
-
-/**
  * Получить цветовую схему
  */
 export const getColorScheme = (): 'light' | 'dark' => {

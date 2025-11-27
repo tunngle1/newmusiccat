@@ -45,15 +45,23 @@ export const searchTracks = async (
         const data: SearchResponse = await response.json();
 
         // Преобразуем данные в формат Track
-        return data.results.map(track => ({
-            id: track.id,
-            title: track.title,
-            artist: track.artist,
-            coverUrl: (track as any).image,
-            audioUrl: (track as any).url,
-            duration: track.duration,
-            isLocal: false
-        }));
+        return data.results.map(track => {
+            let audioUrl = (track as any).url;
+            // Если URL относительный (начинается с /), добавляем базовый URL API
+            if (audioUrl && audioUrl.startsWith('/')) {
+                audioUrl = `${API_BASE_URL}${audioUrl}`;
+            }
+
+            return {
+                id: track.id,
+                title: track.title,
+                artist: track.artist,
+                coverUrl: (track as any).image,
+                audioUrl: audioUrl,
+                duration: track.duration,
+                isLocal: false
+            };
+        });
     } catch (error) {
         console.error('Search error:', error);
         throw error;
@@ -78,12 +86,17 @@ export const getTrack = async (trackId: string): Promise<Track> => {
 
         const track = await response.json();
 
+        let audioUrl = (track as any).url;
+        if (audioUrl && audioUrl.startsWith('/')) {
+            audioUrl = `${API_BASE_URL}${audioUrl}`;
+        }
+
         return {
             id: track.id,
             title: track.title,
             artist: track.artist,
             coverUrl: (track as any).image,
-            audioUrl: (track as any).url,
+            audioUrl: audioUrl,
             duration: track.duration,
             isLocal: false
         };
