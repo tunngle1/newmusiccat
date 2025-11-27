@@ -164,7 +164,7 @@ const HomeView: React.FC = () => {
                 key={genre.name}
                 onClick={async () => {
                   hapticFeedback.light();
-                  setSearchState(prev => ({ ...prev, isSearching: true, results: [], query: genre.name }));
+                  setSearchState(prev => ({ ...prev, isSearching: true, results: [] }));
 
                   try {
                     const results = await getGenreTracks(genre.genreId, 20);
