@@ -6,7 +6,7 @@
 import { Track } from '../types';
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://rmoopo-103-35-189-138.ru.tuna.am';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://knowledgestorm-concern-accomplish-continues.trycloudflare.com';
 
 interface SearchResponse {
     results: Track[];
