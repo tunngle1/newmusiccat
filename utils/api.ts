@@ -6,7 +6,7 @@
 import { Track } from '../types';
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://sheilah-cadastral-adriana.ngrok-free.dev';
 
 interface SearchResponse {
     results: Track[];
