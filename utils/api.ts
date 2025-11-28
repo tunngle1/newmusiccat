@@ -6,7 +6,11 @@
 import { Track } from '../types';
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://amazing-presently-untitled-range.trycloudflare.com';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+
+if (!API_BASE_URL) {
+    throw new Error('VITE_API_URL environment variable is not set');
+}
 
 interface SearchResponse {
     results: Track[];
