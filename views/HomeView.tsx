@@ -31,7 +31,10 @@ const HomeView: React.FC = () => {
   // Поиск с debounce
   useEffect(() => {
     if (!searchState.query.trim()) {
-      setSearchState(prev => ({ ...prev, results: [], hasMore: true, error: null }));
+      // Don't clear results if they exist (from genre search)
+      if (searchState.results.length === 0) {
+        setSearchState(prev => ({ ...prev, hasMore: true, error: null }));
+      }
       return;
     }
 
