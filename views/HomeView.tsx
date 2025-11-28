@@ -30,15 +30,15 @@ const HomeView: React.FC = () => {
   // Поиск с debounce
   useEffect(() => {
     if (!searchState.query.trim()) {
-      // Don't clear results if they exist (from genre search)
-      if (searchState.results.length === 0) {
-        setSearchState(prev => ({ ...prev, hasMore: true, error: null }));
+      // Clear results only if query is empty and we're not in genre mode
+      if (!searchState.genreId) {
+        setSearchState(prev => ({ ...prev, results: [], hasMore: true, error: null }));
       }
       return;
     }
 
     const timeoutId = setTimeout(async () => {
-      setSearchState(prev => ({ ...prev, isSearching: true, error: null, page: 1 }));
+      setSearchState(prev => ({ ...prev, isSearching: true, error: null, page: 1, genreId: null }));
 
       try {
         const results = await searchTracks(searchState.query, 20, 1, searchState.isArtistSearch);
@@ -70,7 +70,7 @@ const HomeView: React.FC = () => {
 
     try {
       let newResults: Track[] = [];
-      
+
       if (searchState.genreId) {
         newResults = await getGenreTracks(searchState.genreId, 20, nextPage);
       } else {
@@ -105,16 +105,28 @@ const HomeView: React.FC = () => {
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
-    setSearchState(prev => ({ ...prev, query, isArtistSearch: false, genreId: null }));
-
-    if (query.trim().length > 2) {
-      // Debounce search is handled by the useEffect above,
-      // so we just update the query here.
-      // The previous implementation had a local debounce here,
-      // but with searchState and useEffect, it's cleaner to let useEffect handle it.
-    } else if (query.trim().length === 0) {
-      // If query is empty, clear results immediately
-      setSearchState(prev => ({ ...prev, results: [], hasMore: true, error: null }));
+    
+    // Immediately clear results and reset state when starting a new search
+    if (query.trim().length > 0) {
+      setSearchState(prev => ({ 
+        ...prev, 
+        query, 
+        isArtistSearch: false, 
+        genreId: null,
+        results: [], // Clear results immediately
+        error: null
+      }));
+    } else {
+      // If query is empty, clear everything
+      setSearchState(prev => ({ 
+        ...prev, 
+        query, 
+        isArtistSearch: false, 
+        genreId: null, 
+        results: [], 
+        hasMore: true, 
+        error: null 
+      }));
     }
   };
 
