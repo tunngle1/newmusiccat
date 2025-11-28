@@ -2,7 +2,8 @@
 Lyrics Service for fetching song lyrics from Genius API
 """
 
-import lyricsgenius
+import requests
+from bs4 import BeautifulSoup
 import re
 from typing import Optional
 
@@ -15,13 +16,12 @@ class LyricsService:
         Args:
             genius_token: Genius API access token
         """
-        self.genius = lyricsgenius.Genius(
-            genius_token,
-            skip_non_songs=True,
-            remove_section_headers=True,
-            verbose=False,
-            timeout=15
-        )
+        self.token = genius_token
+        self.base_url = "https://api.genius.com"
+        self.headers = {
+            'Authorization': f'Bearer {self.token}',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
     
     def get_lyrics(self, title: str, artist: str) -> Optional[str]:
         """
@@ -37,27 +37,94 @@ class LyricsService:
         try:
             print(f"Searching lyrics for: {artist} - {title}")
             
-            # Search for the song
-            song = self.genius.search_song(title, artist)
+            # 1. Search for the song
+            search_url = f"{self.base_url}/search"
+            params = {'q': f"{title} {artist}"}
             
-            if not song:
-                print(f"Song not found: {artist} - {title}")
+            response = requests.get(search_url, headers=self.headers, params=params, timeout=10)
+            
+            if response.status_code != 200:
+                print(f"Search failed with status {response.status_code}")
                 return None
             
-            # Get lyrics
-            lyrics = song.lyrics
+            data = response.json()
             
-            if not lyrics:
+            if not data.get('response') or not data['response'].get('hits'):
+                print(f"No results found for: {artist} - {title}")
                 return None
             
-            # Clean up lyrics
-            lyrics = self._clean_lyrics(lyrics)
+            # Get the first result
+            song_info = data['response']['hits'][0]['result']
+            song_url = song_info.get('url')
             
-            print(f"Successfully fetched lyrics ({len(lyrics)} chars)")
+            if not song_url:
+                print("No song URL found")
+                return None
+            
+            print(f"Found song: {song_info.get('title')} by {song_info.get('primary_artist', {}).get('name')}")
+            
+            # 2. Scrape lyrics from the song page
+            lyrics = self._scrape_lyrics(song_url)
+            
+            if lyrics:
+                print(f"Successfully fetched lyrics ({len(lyrics)} chars)")
+            else:
+                print("Failed to scrape lyrics from page")
+            
             return lyrics
             
         except Exception as e:
             print(f"Error fetching lyrics: {e}")
+            return None
+    
+    def _scrape_lyrics(self, url: str) -> Optional[str]:
+        """
+        Scrape lyrics from Genius song page
+        
+        Args:
+            url: Genius song page URL
+            
+        Returns:
+            Lyrics text or None
+        """
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code != 200:
+                return None
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Find lyrics container (Genius uses different div classes)
+            lyrics_divs = soup.find_all('div', {'data-lyrics-container': 'true'})
+            
+            if not lyrics_divs:
+                # Try alternative selectors
+                lyrics_divs = soup.find_all('div', class_=re.compile(r'Lyrics__Container'))
+            
+            if not lyrics_divs:
+                return None
+            
+            # Extract text from all lyrics divs
+            lyrics_parts = []
+            for div in lyrics_divs:
+                # Get text and preserve line breaks
+                text = div.get_text(separator='\n', strip=True)
+                lyrics_parts.append(text)
+            
+            lyrics = '\n\n'.join(lyrics_parts)
+            
+            # Clean up
+            lyrics = self._clean_lyrics(lyrics)
+            
+            return lyrics if lyrics else None
+            
+        except Exception as e:
+            print(f"Error scraping lyrics: {e}")
             return None
     
     def _clean_lyrics(self, lyrics: str) -> str:
@@ -70,16 +137,11 @@ class LyricsService:
         Returns:
             Cleaned lyrics text
         """
-        # Remove "X Lyrics" at the beginning
-        lyrics = re.sub(r'^.*?Lyrics\n', '', lyrics, flags=re.IGNORECASE)
-        
-        # Remove "Embed" at the end
-        lyrics = lyrics.replace('Embed', '').strip()
-        
         # Remove extra whitespace
         lyrics = re.sub(r'\n{3,}', '\n\n', lyrics)
         
-        # Remove numbers at the end (song ID)
-        lyrics = re.sub(r'\d+$', '', lyrics).strip()
+        # Remove [Verse], [Chorus] etc. markers (optional - you can keep them if you want)
+        # lyrics = re.sub(r'\[.*?\]', '', lyrics)
         
-        return lyrics
+        return lyrics.strip()
+
