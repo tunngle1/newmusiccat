@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, Users, Star, Activity, Check, AlertCircle, ArrowLeft, Database, RefreshCw, Trash2 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
+import { API_BASE_URL } from '../constants';
 
 interface UserStats {
     total_users: number;
@@ -48,7 +49,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
 
     const loadStats = async () => {
         try {
-            const response = await fetch(`http://localhost:8000/api/admin/stats?user_id=${user?.id}`);
+            const response = await fetch(`${API_BASE_URL}/api/admin/stats?user_id=${user?.id}`);
             if (response.ok) {
                 const data = await response.json();
                 setStats(data);
@@ -60,7 +61,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
 
     const loadCacheStats = async () => {
         try {
-            const response = await fetch(`http://localhost:8000/api/admin/cache/stats?user_id=${user?.id}`);
+            const response = await fetch(`${API_BASE_URL}/api/admin/cache/stats?user_id=${user?.id}`);
             if (response.ok) {
                 const data = await response.json();
                 setCacheStats(data);
@@ -72,7 +73,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
 
     const handleResetCache = async () => {
         try {
-            const response = await fetch(`http://localhost:8000/api/admin/cache/reset?admin_id=${user?.id}`, {
+            const response = await fetch(`${API_BASE_URL}/api/admin/cache/reset?admin_id=${user?.id}`, {
                 method: 'POST'
             });
             if (response.ok) {
@@ -96,7 +97,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
             if (grantType === 'admin') body.is_admin = grantValue;
             if (grantType === 'premium') body.is_premium = grantValue;
 
-            const response = await fetch(`http://localhost:8000/api/admin/grant?admin_id=${user.id}`, {
+            const response = await fetch(`${API_BASE_URL}/api/admin/grant?admin_id=${user.id}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)

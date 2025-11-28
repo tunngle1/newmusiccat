@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useEffect, ReactNode } from 'react';
 import { Track, Playlist, RepeatMode, RadioStation, User } from '../types';
-import { MOCK_TRACKS, INITIAL_PLAYLISTS } from '../constants';
+import { MOCK_TRACKS, INITIAL_PLAYLISTS, API_BASE_URL } from '../constants';
 
 interface PlayerContextType {
   // Данные
@@ -112,7 +112,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
         const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
         try {
-          const response = await fetch('http://localhost:8000/api/user/auth', {
+          const response = await fetch(`${API_BASE_URL}/api/user/auth`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
