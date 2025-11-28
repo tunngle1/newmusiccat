@@ -21,6 +21,7 @@ class User(Base):
     last_name = Column(String, nullable=True)
     is_admin = Column(Boolean, default=False)
     is_premium = Column(Boolean, default=False)
+    is_blocked = Column(Boolean, default=False)  # New field for access control
     joined_at = Column(DateTime, default=datetime.utcnow)
 
 class DownloadedMessage(Base):

@@ -139,6 +139,15 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             const data = await response.json();
             console.log("Auth response:", data); // DEBUG LOG
             setUser(data.user);
+          } else if (response.status === 403) {
+            // User is blocked
+            console.error("User is blocked");
+            if (window.Telegram?.WebApp?.showAlert) {
+              window.Telegram.WebApp.showAlert("Доступ к приложению ограничен. Обратитесь к администратору.");
+            } else {
+              alert("Доступ к приложению ограничен. Обратитесь к администратору.");
+            }
+            // Don't set user, keep as null
           } else {
             console.error("Auth error:", await response.text());
           }

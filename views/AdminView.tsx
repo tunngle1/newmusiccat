@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Users, Star, Activity, Check, AlertCircle, ArrowLeft, Database, RefreshCw, Trash2, Crown, UserX } from 'lucide-react';
+import { Shield, Users, Star, Activity, Check, AlertCircle, ArrowLeft, Database, RefreshCw, Trash2, Crown, UserX, Ban, CheckCircle } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { API_BASE_URL } from '../constants';
 
@@ -28,19 +28,21 @@ interface UserListItem {
     last_name: string | null;
     is_admin: boolean;
     is_premium: boolean;
+    is_blocked: boolean;
 }
 
 interface AdminViewProps {
     onBack: () => void;
 }
 
-type TabType = 'overview' | 'premium' | 'admins';
+type TabType = 'overview' | 'all' | 'premium' | 'admins';
 
 const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
     const { user } = usePlayer();
     const [activeTab, setActiveTab] = useState<TabType>('overview');
     const [stats, setStats] = useState<UserStats | null>(null);
     const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
+    const [allUsers, setAllUsers] = useState<UserListItem[]>([]);
     const [premiumUsers, setPremiumUsers] = useState<UserListItem[]>([]);
     const [adminUsers, setAdminUsers] = useState<UserListItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -59,7 +61,9 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
     }, [user]);
 
     useEffect(() => {
-        if (activeTab === 'premium' && premiumUsers.length === 0) {
+        if (activeTab === 'all' && allUsers.length === 0) {
+            loadAllUsers();
+        } else if (activeTab === 'premium' && premiumUsers.length === 0) {
             loadPremiumUsers();
         } else if (activeTab === 'admins' && adminUsers.length === 0) {
             loadAdminUsers();
@@ -94,6 +98,18 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
             }
         } catch (error) {
             console.error('Failed to load cache stats:', error);
+        }
+    };
+
+    const loadAllUsers = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/admin/users?user_id=${user?.id}&filter_type=all`);
+            if (response.ok) {
+                const data = await response.json();
+                setAllUsers(data.users);
+            }
+        } catch (error) {
+            console.error('Failed to load all users:', error);
         }
     };
 
@@ -202,6 +218,33 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
         setTimeout(() => setMessage(null), 3000);
     };
 
+    const handleBlockUser = async (userId: number, isBlocked: boolean) => {
+        if (!user) return;
+
+        try {
+            const body = { user_id: userId, is_blocked: isBlocked };
+
+            const response = await fetch(`${API_BASE_URL}/api/admin/grant?admin_id=${user.id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (response.ok) {
+                setMessage({ type: 'success', text: `Пользователь ${isBlocked ? 'заблокирован' : 'разблокирован'}` });
+                loadAllUsers();
+                loadStats();
+            } else {
+                const errorData = await response.json();
+                setMessage({ type: 'error', text: errorData.detail || 'Ошибка при изменении статуса' });
+            }
+        } catch (error) {
+            setMessage({ type: 'error', text: 'Ошибка сети' });
+        }
+
+        setTimeout(() => setMessage(null), 3000);
+    };
+
     const getUserDisplayName = (user: UserListItem) => {
         if (user.first_name || user.last_name) {
             return `${user.first_name || ''} ${user.last_name || ''}`.trim();
@@ -240,17 +283,26 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                 <button
                     onClick={() => setActiveTab('overview')}
                     className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${activeTab === 'overview'
-                            ? 'bg-blue-500 text-white'
-                            : 'text-gray-400 hover:text-white'
+                        ? 'bg-blue-500 text-white'
+                        : 'text-gray-400 hover:text-white'
                         }`}
                 >
                     Обзор
                 </button>
                 <button
+                    onClick={() => setActiveTab('all')}
+                    className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${activeTab === 'all'
+                        ? 'bg-blue-500 text-white'
+                        : 'text-gray-400 hover:text-white'
+                        }`}
+                >
+                    Все
+                </button>
+                <button
                     onClick={() => setActiveTab('premium')}
                     className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${activeTab === 'premium'
-                            ? 'bg-yellow-500 text-white'
-                            : 'text-gray-400 hover:text-white'
+                        ? 'bg-yellow-500 text-white'
+                        : 'text-gray-400 hover:text-white'
                         }`}
                 >
                     Premium
@@ -258,8 +310,8 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                 <button
                     onClick={() => setActiveTab('admins')}
                     className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${activeTab === 'admins'
-                            ? 'bg-blue-500 text-white'
-                            : 'text-gray-400 hover:text-white'
+                        ? 'bg-blue-500 text-white'
+                        : 'text-gray-400 hover:text-white'
                         }`}
                 >
                     Админы
@@ -375,8 +427,8 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                                     type="button"
                                     onClick={() => setGrantType('premium')}
                                     className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${grantType === 'premium'
-                                            ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/50'
-                                            : 'bg-white/5 text-gray-400'
+                                        ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/50'
+                                        : 'bg-white/5 text-gray-400'
                                         }`}
                                 >
                                     Premium
@@ -385,8 +437,8 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                                     type="button"
                                     onClick={() => setGrantType('admin')}
                                     className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${grantType === 'admin'
-                                            ? 'bg-blue-500/20 text-blue-500 border border-blue-500/50'
-                                            : 'bg-white/5 text-gray-400'
+                                        ? 'bg-blue-500/20 text-blue-500 border border-blue-500/50'
+                                        : 'bg-white/5 text-gray-400'
                                         }`}
                                 >
                                     Admin
@@ -421,8 +473,8 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                         {message && (
                             <div
                                 className={`mt-4 p-3 rounded-xl flex items-center gap-2 text-sm ${message.type === 'success'
-                                        ? 'bg-green-500/20 text-green-400'
-                                        : 'bg-red-500/20 text-red-400'
+                                    ? 'bg-green-500/20 text-green-400'
+                                    : 'bg-red-500/20 text-red-400'
                                     }`}
                             >
                                 {message.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}
@@ -431,6 +483,90 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                         )}
                     </div>
                 </>
+            )}
+
+            {/* All Users Tab */}
+            {activeTab === 'all' && (
+                <div className="bg-white/5 p-6 rounded-2xl border border-white/10">
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                        <Users className="text-blue-500" />
+                        Все пользователи ({allUsers.length})
+                    </h3>
+
+                    {allUsers.length === 0 ? (
+                        <div className="text-center py-8 text-gray-400">
+                            Нет пользователей
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {allUsers.map((u) => (
+                                <div
+                                    key={u.id}
+                                    className={`bg-black/20 p-4 rounded-xl flex items-center justify-between ${u.is_blocked ? 'border border-red-500/30' : ''}`}
+                                >
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <div className="text-white font-medium">{getUserDisplayName(u)}</div>
+                                            {u.id === SUPER_ADMIN_ID && (
+                                                <span className="px-2 py-0.5 bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-xs font-bold rounded-full flex items-center gap-1">
+                                                    <Crown size={12} />
+                                                    SUPER ADMIN
+                                                </span>
+                                            )}
+                                            {u.is_admin && u.id !== SUPER_ADMIN_ID && (
+                                                <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs font-medium rounded-full flex items-center gap-1">
+                                                    <Shield size={12} />
+                                                    Admin
+                                                </span>
+                                            )}
+                                            {u.is_premium && (
+                                                <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs font-medium rounded-full flex items-center gap-1">
+                                                    <Star size={12} />
+                                                    Premium
+                                                </span>
+                                            )}
+                                            {u.is_blocked && (
+                                                <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs font-medium rounded-full flex items-center gap-1">
+                                                    <Ban size={12} />
+                                                    Заблокирован
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="text-sm text-gray-400 mt-1">
+                                            ID: {u.id}
+                                            {u.username && ` • @${u.username}`}
+                                        </div>
+                                    </div>
+
+                                    {u.id !== SUPER_ADMIN_ID && (
+                                        <button
+                                            onClick={() => handleBlockUser(u.id, !u.is_blocked)}
+                                            className={`p-2 rounded-lg transition-colors ${u.is_blocked
+                                                ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400'
+                                                : 'bg-red-500/20 hover:bg-red-500/30 text-red-400'
+                                                }`}
+                                            title={u.is_blocked ? 'Разблокировать' : 'Заблокировать'}
+                                        >
+                                            {u.is_blocked ? <CheckCircle size={18} /> : <Ban size={18} />}
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {message && (
+                        <div
+                            className={`mt-4 p-3 rounded-xl flex items-center gap-2 text-sm ${message.type === 'success'
+                                ? 'bg-green-500/20 text-green-400'
+                                : 'bg-red-500/20 text-red-400'
+                                }`}
+                        >
+                            {message.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}
+                            {message.text}
+                        </div>
+                    )}
+                </div>
             )}
 
             {/* Premium Users Tab */}
@@ -485,8 +621,8 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                     {message && (
                         <div
                             className={`mt-4 p-3 rounded-xl flex items-center gap-2 text-sm ${message.type === 'success'
-                                    ? 'bg-green-500/20 text-green-400'
-                                    : 'bg-red-500/20 text-red-400'
+                                ? 'bg-green-500/20 text-green-400'
+                                : 'bg-red-500/20 text-red-400'
                                 }`}
                         >
                             {message.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}
@@ -546,8 +682,8 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                     {message && (
                         <div
                             className={`mt-4 p-3 rounded-xl flex items-center gap-2 text-sm ${message.type === 'success'
-                                    ? 'bg-green-500/20 text-green-400'
-                                    : 'bg-red-500/20 text-red-400'
+                                ? 'bg-green-500/20 text-green-400'
+                                : 'bg-red-500/20 text-red-400'
                                 }`}
                         >
                             {message.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}

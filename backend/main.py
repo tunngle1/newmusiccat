@@ -61,6 +61,7 @@ class GrantRequest(BaseModel):
     user_id: int
     is_admin: Optional[bool] = None
     is_premium: Optional[bool] = None
+    is_blocked: Optional[bool] = None
 
 class CacheStats(BaseModel):
     total_entries: int
@@ -77,6 +78,7 @@ class UserListItem(BaseModel):
     last_name: Optional[str] = None
     is_admin: bool
     is_premium: bool
+    is_blocked: bool
 
 class UserListResponse(BaseModel):
     users: List[UserListItem]
@@ -156,6 +158,11 @@ async def auth_user(user_data: UserAuth, db: Session = Depends(get_db)):
     
     db.commit()
     db.refresh(user)
+    
+    # Check if user is blocked
+    if user.is_blocked:
+        raise HTTPException(status_code=403, detail="Access denied: User is blocked")
+    
     return {
         "status": "ok",
         "user": {
@@ -190,7 +197,7 @@ async def get_stats(user_id: int = Query(...), db: Session = Depends(get_db)):
 async def get_users(user_id: int = Query(...), filter_type: str = Query("all"), db: Session = Depends(get_db)):
     """
     Get list of users (only for admins)
-    filter_type: 'all', 'premium', 'admin'
+    filter_type: 'all', 'premium', 'admin', 'blocked'
     """
     user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.is_admin:
@@ -202,8 +209,12 @@ async def get_users(user_id: int = Query(...), filter_type: str = Query("all"), 
         query = query.filter(User.is_premium == True)
     elif filter_type == "admin":
         query = query.filter(User.is_admin == True)
+    elif filter_type == "blocked":
+        query = query.filter(User.is_blocked == True)
+    # filter_type == "all" - no additional filter
     
-    users = query.all()
+    # Sort by joined_at descending (newest first)
+    users = query.order_by(User.joined_at.desc()).all()
     
     return UserListResponse(
         users=[UserListItem(
@@ -212,7 +223,8 @@ async def get_users(user_id: int = Query(...), filter_type: str = Query("all"), 
             first_name=u.first_name,
             last_name=u.last_name,
             is_admin=u.is_admin,
-            is_premium=u.is_premium
+            is_premium=u.is_premium,
+            is_blocked=u.is_blocked
         ) for u in users]
     )
 
@@ -241,6 +253,9 @@ async def grant_rights(
     
     if request.is_admin is not None:
         target_user.is_admin = request.is_admin
+    
+    if request.is_blocked is not None:
+        target_user.is_blocked = request.is_blocked
     
     # Check if premium is being revoked
     was_premium = target_user.is_premium
