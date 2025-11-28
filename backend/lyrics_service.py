@@ -153,9 +153,24 @@ class LyricsService:
                 continue
             if re.match(r'^Translations', line, re.IGNORECASE):
                 continue
-            # Common languages headers
-            if line in ['English', 'Russian', 'Español', 'Deutsch', 'Français', 'Italiano', 'Português']:
+            
+            # Filter out "Read More"
+            if re.match(r'^Read More$', line, re.IGNORECASE):
                 continue
+            
+            # Filter out track description (starts with quote, contains "is the", "is a", "is about")
+            if re.match(r'^["“].*?["”]\s+is\s+(the|a|about)', line, re.IGNORECASE):
+                continue
+                
+            # Common languages headers and garbage
+            garbage_lines = [
+                'English', 'Russian', 'Español', 'Deutsch', 'Français', 'Italiano', 'Português',
+                'Slovenčina', 'Ελληνικά', 'فارسی', 'Magyar', 'Türkçe', 'Русский (Russian)', 
+                'Română', 'Polski', 'Українська', '日本語', '한국어'
+            ]
+            if line in garbage_lines:
+                continue
+                
             # "Song Title Lyrics" header
             if re.match(r'^.*? Lyrics$', line, re.IGNORECASE):
                 continue
