@@ -244,14 +244,10 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           if (audioRef.current.src !== src) {
             // Save current playback position and playing state
             const wasPlaying = isPlaying;
-            const savedTime = audioRef.current.currentTime || 0;
-            const hadPreviousSrc = audioRef.current.src !== '';
 
-            // Only reset time if this is a completely new track (not just switching source)
-            if (!hadPreviousSrc || savedTime === 0) {
-              setDuration(0);
-              setCurrentTime(0);
-            }
+            // Reset time for new track
+            setDuration(0);
+            setCurrentTime(0);
 
             // Освобождаем старый URL если это был blob
             if (audioRef.current.src.startsWith('blob:')) {
@@ -260,11 +256,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
             audioRef.current.src = src;
             audioRef.current.load(); // Явно загружаем новый источник
-
-            // Restore playback position if we're switching sources for the same track
-            if (hadPreviousSrc && savedTime > 0) {
-              audioRef.current.currentTime = savedTime;
-            }
+            audioRef.current.currentTime = 0; // Ensure we start from 0
 
             if (wasPlaying) {
               const playPromise = audioRef.current.play();
@@ -384,7 +376,15 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       trackIds: []
     };
     setPlaylists(prev => [...prev, newPlaylist]);
-    storage.savePlaylist(newPlaylist); // Сохраняем в БД
+    storage.savePlaylist(newPlaylist).catch(err => {
+      console.error("Failed to save playlist:", err);
+      // Revert state if save fails? Or just notify user
+      if (window.Telegram?.WebApp?.showPopup) {
+        window.Telegram.WebApp.showPopup({ message: "Ошибка при сохранении плейлиста" });
+      } else {
+        console.error("Ошибка при сохранении плейлиста");
+      }
+    });
   };
 
   const addToPlaylist = (playlistId: string, track: Track) => {
@@ -400,7 +400,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setPlaylists(prev => prev.map(pl => {
       if (pl.id === playlistId && !pl.trackIds.includes(track.id)) {
         const updatedPlaylist = { ...pl, trackIds: [...pl.trackIds, track.id] };
-        storage.updatePlaylist(updatedPlaylist); // Обновляем в БД
+        storage.updatePlaylist(updatedPlaylist).catch(err => console.error("Failed to update playlist:", err));
         return updatedPlaylist;
       }
       return pl;
