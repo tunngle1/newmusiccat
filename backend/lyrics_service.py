@@ -137,11 +137,39 @@ class LyricsService:
         Returns:
             Cleaned lyrics text
         """
-        # Remove extra whitespace
-        lyrics = re.sub(r'\n{3,}', '\n\n', lyrics)
+        lines = lyrics.split('\n')
+        cleaned_lines = []
         
-        # Remove [Verse], [Chorus] etc. markers (optional - you can keep them if you want)
-        # lyrics = re.sub(r'\[.*?\]', '', lyrics)
+        for line in lines:
+            line = line.strip()
+            
+            # Skip empty lines (will be handled by join later)
+            if not line:
+                cleaned_lines.append("")
+                continue
+            
+            # Filter out Genius metadata
+            if re.match(r'^\d+\s*Contributors', line, re.IGNORECASE):
+                continue
+            if re.match(r'^Translations', line, re.IGNORECASE):
+                continue
+            # Common languages headers
+            if line in ['English', 'Russian', 'Español', 'Deutsch', 'Français', 'Italiano', 'Português']:
+                continue
+            # "Song Title Lyrics" header
+            if re.match(r'^.*? Lyrics$', line, re.IGNORECASE):
+                continue
+            # "Embed" at the end
+            if re.match(r'^Embed$', line, re.IGNORECASE):
+                continue
+                
+            cleaned_lines.append(line)
+        
+        # Rejoin lines
+        lyrics = '\n'.join(cleaned_lines)
+        
+        # Remove extra whitespace (more than 2 newlines)
+        lyrics = re.sub(r'\n{3,}', '\n\n', lyrics)
         
         return lyrics.strip()
 
