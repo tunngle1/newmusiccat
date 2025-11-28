@@ -39,7 +39,8 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
             return;
         }
         loadData();
-    }, [user, onBack]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user]);
 
     const loadData = async () => {
         setIsLoading(true);

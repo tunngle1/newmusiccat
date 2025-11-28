@@ -591,17 +591,23 @@ const HomeView: React.FC = () => {
                   try {
                     const user = getTelegramUser();
                     if (!user) {
-                      alert('Не удалось получить данные пользователя');
+                      if (window.Telegram?.WebApp?.showAlert) {
+                        window.Telegram.WebApp.showAlert('Не удалось получить данные пользователя');
+                      }
                       return;
                     }
                     await downloadToChat(user.id, trackToDownload);
                     setShowDownloadModal(false);
                     setTrackToDownload(null);
                     hapticFeedback.success();
-                    alert('Трек отправлен в чат!');
+                    if (window.Telegram?.WebApp?.showAlert) {
+                      window.Telegram.WebApp.showAlert('Трек отправлен в чат!');
+                    }
                   } catch (error) {
                     console.error('Download to chat error:', error);
-                    alert('Ошибка при отправке в чат');
+                    if (window.Telegram?.WebApp?.showAlert) {
+                      window.Telegram.WebApp.showAlert('Ошибка при отправке в чат');
+                    }
                   }
                 }}
               >
