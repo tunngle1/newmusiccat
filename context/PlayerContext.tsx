@@ -505,7 +505,8 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       removeDownloadedTrack,
       searchState,
       setSearchState,
-      resetSearch
+      resetSearch,
+      user
     }}>
       {children}
     </PlayerContext.Provider>
