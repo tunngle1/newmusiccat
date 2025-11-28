@@ -245,7 +245,7 @@ async def search_tracks(
             )
 
         # 2. Если нет в кэше, делаем запрос
-        tracks = parser.search(q, limit=limit, page=page)
+        tracks = await parser.search(q, limit=limit, page=page)
         
         # Фильтрация по артисту если запрошено
         if by_artist:
@@ -373,7 +373,7 @@ async def get_genre_tracks(
             }
 
         # 2. Запрос
-        tracks = parser.get_genre_tracks(genre_id, limit=limit, page=page)
+        tracks = await parser.get_genre_tracks(genre_id, limit=limit, page=page)
         
         track_models = []
         base_url = ""

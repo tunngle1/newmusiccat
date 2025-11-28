@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import re
 from typing import List, Dict, Optional
 import urllib.parse
+import asyncio
 
 class HitmoParser:
     """
@@ -21,9 +22,9 @@ class HitmoParser:
             'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
         }
         
-    def search(self, query: str, limit: int = 20, page: int = 1) -> List[Dict]:
+    async def search(self, query: str, limit: int = 20, page: int = 1) -> List[Dict]:
         """
-        Search for tracks
+        Search for tracks (Async)
         """
         try:
             params = {
@@ -31,25 +32,21 @@ class HitmoParser:
                 'start': (page - 1) * 48 # Hitmo usually shows 48 tracks per page
             }
             
-            with httpx.Client(headers=self.headers, timeout=10.0) as client:
-                response = client.get(self.SEARCH_URL, params=params)
+            async with httpx.AsyncClient(headers=self.headers, timeout=10.0) as client:
+                response = await client.get(self.SEARCH_URL, params=params)
                 response.raise_for_status()
                 
                 soup = BeautifulSoup(response.text, 'html.parser')
-                tracks = []
-                
-                # Find all track blocks
-                # Based on typical structure, tracks are usually in li.tracks__item or similar
-                # We'll look for the specific structure we saw in the markdown
+                tracks_data = []
                 
                 track_elements = soup.select('.tracks__item')
                 
+                # 1. Parse basic info
                 for el in track_elements:
-                    if len(tracks) >= limit:
+                    if len(tracks_data) >= limit:
                         break
                         
                     try:
-                        # Extract basic info
                         title_el = el.select_one('.track__title')
                         artist_el = el.select_one('.track__desc')
                         time_el = el.select_one('.track__fulltime')
@@ -63,68 +60,71 @@ class HitmoParser:
                         artist = artist_el.text.strip() if artist_el else "Unknown"
                         duration_str = time_el.text.strip() if time_el else "00:00"
                         
-                        # Parse duration to seconds
                         try:
                             mins, secs = map(int, duration_str.split(':'))
                             duration = mins * 60 + secs
                         except:
                             duration = 0
                             
-                        # URL
                         url = download_el.get('href')
                         if not url:
                             continue
                             
-                        # ID
-                        # Try to get from data-id or extract from URL
                         track_id = el.get('data-track-id')
                         if not track_id:
-                            # Fallback: hash of artist+title
                             track_id = f"gen_{abs(hash(artist + title))}"
                             
-                        # Cover
-                        image = None
-                        
-                        # Try to get high quality cover from iTunes
-                        try:
-                            image = self._get_itunes_cover(artist, title)
-                        except Exception as e:
-                            print(f"iTunes cover error: {e}")
-                            
-                        # Fallback to Hitmo cover if iTunes failed
-                        if not image and cover_el:
+                        # Extract fallback cover from style
+                        fallback_image = None
+                        if cover_el:
                             style = cover_el.get('style', '')
-                            # Extract url('...') from style
                             match = re.search(r"url\(['\"]?(.*?)['\"]?\)", style)
                             if match:
-                                image = match.group(1)
+                                fallback_image = match.group(1)
                         
-                        if not image:
-                            # Fallback image
-                            image = f"https://ui-avatars.com/api/?name={urllib.parse.quote(artist)}&size=200&background=random"
-                            
-                        tracks.append({
+                        tracks_data.append({
                             'id': track_id,
                             'title': title,
                             'artist': artist,
                             'duration': duration,
                             'url': url,
-                            'image': image
+                            'fallback_image': fallback_image,
+                            'image': None # Will be filled later
                         })
                         
                     except Exception as e:
                         print(f"Error parsing track: {e}")
                         continue
-                        
-                return tracks
+                
+                # 2. Fetch iTunes covers in parallel
+                tasks = []
+                for track in tracks_data:
+                    tasks.append(self._get_itunes_cover(client, track['artist'], track['title']))
+                
+                covers = await asyncio.gather(*tasks)
+                
+                # 3. Merge covers
+                final_tracks = []
+                for track, cover in zip(tracks_data, covers):
+                    image = cover
+                    if not image:
+                        image = track['fallback_image']
+                    if not image:
+                        image = f"https://ui-avatars.com/api/?name={urllib.parse.quote(track['artist'])}&size=200&background=random"
+                    
+                    track['image'] = image
+                    del track['fallback_image'] # Clean up
+                    final_tracks.append(track)
+                    
+                return final_tracks
                 
         except Exception as e:
             print(f"Search error: {e}")
             return []
 
-    def _get_itunes_cover(self, artist: str, title: str) -> Optional[str]:
+    async def _get_itunes_cover(self, client: httpx.AsyncClient, artist: str, title: str) -> Optional[str]:
         """
-        Get high quality cover from iTunes API
+        Get high quality cover from iTunes API (Async)
         """
         try:
             term = f"{artist} {title}"
@@ -135,23 +135,22 @@ class HitmoParser:
                 'limit': 1
             }
             
-            with httpx.Client(timeout=3.0) as client:
-                response = client.get("https://itunes.apple.com/search", params=params)
-                if response.status_code == 200:
-                    data = response.json()
-                    if data['resultCount'] > 0:
-                        # Get artwork url and replace size with 600x600
-                        artwork = data['results'][0].get('artworkUrl100')
-                        if artwork:
-                            # Replace any size (e.g. 100x100bb, 60x60bb) with 600x600bb
-                            return re.sub(r'\d+x\d+bb', '600x600bb', artwork)
+            # Use the existing client session
+            response = await client.get("https://itunes.apple.com/search", params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data['resultCount'] > 0:
+                    artwork = data['results'][0].get('artworkUrl100')
+                    if artwork:
+                        return re.sub(r'\d+x\d+bb', '600x600bb', artwork)
             return None
         except:
             return None
     
-    def get_genre_tracks(self, genre_id: int, limit: int = 20, page: int = 1) -> List[Dict]:
+    async def get_genre_tracks(self, genre_id: int, limit: int = 20, page: int = 1) -> List[Dict]:
         """
-        Get tracks from a specific genre
+        Get tracks from a specific genre (Async)
         """
         try:
             url = f"{self.BASE_URL}/genre/{genre_id}"
@@ -159,22 +158,20 @@ class HitmoParser:
                 'start': (page - 1) * 48
             }
             
-            with httpx.Client(headers=self.headers, timeout=10.0, follow_redirects=True) as client:
-                response = client.get(url, params=params)
+            async with httpx.AsyncClient(headers=self.headers, timeout=10.0, follow_redirects=True) as client:
+                response = await client.get(url, params=params)
                 response.raise_for_status()
                 
                 soup = BeautifulSoup(response.text, 'html.parser')
-                tracks = []
+                tracks_data = []
                 
-                # Find all track blocks (same structure as search)
                 track_elements = soup.select('.tracks__item')
                 
                 for el in track_elements:
-                    if len(tracks) >= limit:
+                    if len(tracks_data) >= limit:
                         break
                         
                     try:
-                        # Extract basic info
                         title_el = el.select_one('.track__title')
                         artist_el = el.select_one('.track__desc')
                         time_el = el.select_one('.track__fulltime')
@@ -188,56 +185,61 @@ class HitmoParser:
                         artist = artist_el.text.strip() if artist_el else "Unknown"
                         duration_str = time_el.text.strip() if time_el else "00:00"
                         
-                        # Parse duration to seconds
                         try:
                             mins, secs = map(int, duration_str.split(':'))
                             duration = mins * 60 + secs
                         except:
                             duration = 0
                             
-                        # URL
                         url = download_el.get('href')
                         if not url:
                             continue
                             
-                        # ID
                         track_id = el.get('data-track-id')
                         if not track_id:
                             track_id = f"gen_{abs(hash(artist + title))}"
                             
-                        # Cover
-                        image = None
-                        
-                        # Try to get high quality cover from iTunes
-                        try:
-                            image = self._get_itunes_cover(artist, title)
-                        except Exception as e:
-                            print(f"iTunes cover error: {e}")
-                            
-                        # Fallback to Hitmo cover if iTunes failed
-                        if not image and cover_el:
+                        fallback_image = None
+                        if cover_el:
                             style = cover_el.get('style', '')
                             match = re.search(r"url\(['\"]?(.*?)['\"]?\)", style)
                             if match:
-                                image = match.group(1)
+                                fallback_image = match.group(1)
                         
-                        if not image:
-                            image = f"https://ui-avatars.com/api/?name={urllib.parse.quote(artist)}&size=200&background=random"
-                            
-                        tracks.append({
+                        tracks_data.append({
                             'id': track_id,
                             'title': title,
                             'artist': artist,
                             'duration': duration,
                             'url': url,
-                            'image': image
+                            'fallback_image': fallback_image,
+                            'image': None
                         })
                         
                     except Exception as e:
                         print(f"Error parsing track: {e}")
                         continue
-                        
-                return tracks
+                
+                # Fetch covers in parallel
+                tasks = []
+                for track in tracks_data:
+                    tasks.append(self._get_itunes_cover(client, track['artist'], track['title']))
+                
+                covers = await asyncio.gather(*tasks)
+                
+                final_tracks = []
+                for track, cover in zip(tracks_data, covers):
+                    image = cover
+                    if not image:
+                        image = track['fallback_image']
+                    if not image:
+                        image = f"https://ui-avatars.com/api/?name={urllib.parse.quote(track['artist'])}&size=200&background=random"
+                    
+                    track['image'] = image
+                    del track['fallback_image']
+                    final_tracks.append(track)
+                    
+                return final_tracks
                 
         except Exception as e:
             print(f"Genre tracks error: {e}")
