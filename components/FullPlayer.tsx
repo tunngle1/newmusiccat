@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { ChevronDown, Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Download, Share2, Shuffle, FileText } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { ChevronDown, Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Download, Share2, Shuffle, FileText, Heart } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { formatTime } from '../utils/format';
 import { getLyrics } from '../utils/api';
 import LyricsModal from './LyricsModal';
 import MarqueeText from './MarqueeText';
 import ArtistSelectorModal from './ArtistSelectorModal';
+import { hapticFeedback } from '../utils/telegram';
+import { getDominantColor } from '../utils/colors';
 
 
 interface FullPlayerProps {
@@ -29,7 +31,9 @@ const FullPlayer: React.FC<FullPlayerProps> = ({ onCollapse }) => {
     isShuffle,
     toggleShuffle,
     downloadTrack,
-    setSearchState
+    setSearchState,
+    favorites,
+    toggleFavorite
   } = usePlayer();
 
   // Lyrics state
@@ -40,6 +44,82 @@ const FullPlayer: React.FC<FullPlayerProps> = ({ onCollapse }) => {
 
   // Artist selector state
   const [showArtistSelector, setShowArtistSelector] = useState(false);
+
+  // Gesture state
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+  const lastTap = useRef<number>(0);
+  const [showHeartAnimation, setShowHeartAnimation] = useState(false);
+
+  // Dynamic Background State
+  const [backgroundColor, setBackgroundColor] = useState<string>('#1a1a1a');
+
+  const title = isRadioMode ? currentRadio?.name : currentTrack?.title;
+  const subtitle = isRadioMode ? currentRadio?.genre : currentTrack?.artist;
+  const coverUrl = isRadioMode ? currentRadio?.image : currentTrack?.coverUrl;
+
+  // Update background color when cover changes
+  useEffect(() => {
+    if (coverUrl) {
+      getDominantColor(coverUrl).then(color => {
+        setBackgroundColor(color);
+      });
+    }
+  }, [coverUrl]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartX.current || !touchStartY.current) return;
+
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+
+    const diffX = touchStartX.current - touchEndX;
+    const diffY = touchStartY.current - touchEndY;
+
+    // Swipe Thresholds
+    const minSwipeDistance = 50;
+    const maxVerticalForHorizontalSwipe = 50;
+    const maxHorizontalForVerticalSwipe = 50;
+
+    // Horizontal Swipe (Next/Prev)
+    if (Math.abs(diffX) > minSwipeDistance && Math.abs(diffY) < maxVerticalForHorizontalSwipe) {
+      if (diffX > 0) {
+        // Swipe Left -> Next
+        nextTrack();
+      } else {
+        // Swipe Right -> Prev
+        prevTrack();
+      }
+    }
+    // Vertical Swipe (Collapse)
+    else if (diffY < -minSwipeDistance && Math.abs(diffX) < maxHorizontalForVerticalSwipe) {
+      // Swipe Down -> Collapse
+      onCollapse();
+    }
+
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
+  const handleDoubleTap = (e: React.MouseEvent | React.TouchEvent) => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+
+    if (now - lastTap.current < DOUBLE_TAP_DELAY) {
+      // Double tap detected
+      if (currentTrack) {
+        toggleFavorite(currentTrack);
+        setShowHeartAnimation(true);
+        setTimeout(() => setShowHeartAnimation(false), 800);
+      }
+    }
+    lastTap.current = now;
+  };
 
   const handleShowLyrics = async () => {
     if (!currentTrack) return;
@@ -60,34 +140,57 @@ const FullPlayer: React.FC<FullPlayerProps> = ({ onCollapse }) => {
 
   if (!currentTrack && !currentRadio) return null;
 
-  const title = isRadioMode ? currentRadio?.name : currentTrack?.title;
-  const subtitle = isRadioMode ? currentRadio?.genre : currentTrack?.artist;
-  const coverUrl = isRadioMode ? currentRadio?.image : currentTrack?.coverUrl;
+  const isFavorite = currentTrack ? favorites.some(f => f.id === currentTrack.id) : false;
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     seek(Number(e.target.value));
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center pt-safe pb-safe animate-fade-in overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 flex flex-col items-center pt-safe pb-safe animate-fade-in overflow-hidden transition-colors duration-700"
+      style={{ backgroundColor }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* Dynamic Background */}
       <div className="absolute inset-0 z-0">
-        <div className="absolute inset-0 bg-black/60 z-10" />
+        {/* Reduced opacity of black overlay to let color show through */}
+        <div className="absolute inset-0 bg-black/30 z-10" />
         <img
           src={coverUrl}
           alt="Background"
-          className="w-full h-full object-cover blur-3xl scale-110 opacity-60"
+          className="w-full h-full object-cover blur-3xl scale-110 opacity-40"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent z-20" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 z-20" />
       </div>
 
       {/* Content */}
       <div className="relative z-30 w-full h-full flex flex-col">
         {/* Header */}
         <div className="w-full flex justify-between items-center px-6 py-6">
-          <button onClick={onCollapse} className="text-white/80 hover:text-white transition-colors p-2 glass-button rounded-full">
-            <ChevronDown size={24} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={onCollapse} className="text-white/80 hover:text-white transition-colors p-2 glass-button rounded-full">
+              <ChevronDown size={24} />
+            </button>
+            {!isRadioMode && currentTrack && (
+              <>
+                <button
+                  onClick={() => currentTrack && toggleFavorite(currentTrack)}
+                  className={`p-2 rounded-full transition-all ${isFavorite ? 'text-red-500' : 'text-white/60 hover:text-white'}`}
+                >
+                  <Heart size={24} className={isFavorite ? 'fill-red-500' : ''} />
+                </button>
+
+                <button
+                  onClick={handleShowLyrics}
+                  className="p-2 text-white/60 hover:text-white transition-colors"
+                >
+                  <FileText size={24} />
+                </button>
+              </>
+            )}
+          </div>
           <div className="text-xs font-medium tracking-[0.2em] text-white/60 uppercase text-glow">Сейчас играет</div>
           <button className="text-white/80 hover:text-white transition-colors p-2 glass-button rounded-full">
             <Share2 size={20} />
@@ -96,12 +199,21 @@ const FullPlayer: React.FC<FullPlayerProps> = ({ onCollapse }) => {
 
         {/* Cover Art */}
         <div className="flex-1 flex items-center justify-center w-full px-8 py-4">
-          <div className="relative w-full aspect-square max-w-sm rounded-[2rem] overflow-hidden shadow-2xl ring-1 ring-white/10">
+          <div
+            className="relative w-full aspect-square max-w-sm rounded-[2rem] overflow-hidden shadow-2xl ring-1 ring-white/10 active:scale-95 transition-transform duration-200"
+            onClick={handleDoubleTap}
+          >
             <img
               src={coverUrl}
-              alt="Album Art"
+              alt={title}
               className={`w-full h-full object-cover transform transition-transform duration-700 ${isRadioMode && isPlaying ? 'animate-pulse-slow' : ''}`}
             />
+            {/* Heart Animation Overlay */}
+            {showHeartAnimation && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/30 animate-fade-in">
+                <Heart size={80} className="text-red-500 fill-red-500 animate-bounce" />
+              </div>
+            )}
             {isRadioMode && (
               <div className="absolute top-4 right-4 px-3 py-1 glass rounded-full text-xs font-bold text-white flex items-center gap-2 shadow-lg animate-pulse">
                 <span className="w-2 h-2 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.6)]"></span>

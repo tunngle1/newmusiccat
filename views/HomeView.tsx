@@ -20,7 +20,8 @@ const HomeView: React.FC = () => {
     togglePlay,
     searchState,
     setSearchState,
-    user
+    user,
+    favorites
   } = usePlayer();
 
   const [showActionModal, setShowActionModal] = useState(false);
@@ -260,12 +261,23 @@ const HomeView: React.FC = () => {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold text-gray-100">Жанры</h3>
-            <button
-              onClick={() => setShowAllGenres(!showAllGenres)}
-              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              {showAllGenres ? 'Свернуть' : 'Все'}
-            </button>
+            <div className="flex gap-4">
+              <button
+                onClick={() => {
+                  hapticFeedback.light();
+                  setSearchState(prev => ({ ...prev, isSearching: true, results: favorites, genreId: null, page: 1, query: 'Избранное' }));
+                }}
+                className="text-sm text-pink-400 hover:text-pink-300 transition-colors font-medium"
+              >
+                Избранное ({favorites.length})
+              </button>
+              <button
+                onClick={() => setShowAllGenres(!showAllGenres)}
+                className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                {showAllGenres ? 'Свернуть' : 'Все'}
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

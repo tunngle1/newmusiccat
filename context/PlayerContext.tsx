@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useRef, useEffect, ReactNode } from 'react';
 import { Track, Playlist, RepeatMode, RadioStation, User, SearchMode } from '../types';
 import { MOCK_TRACKS, INITIAL_PLAYLISTS, API_BASE_URL } from '../constants';
+import { hapticFeedback } from '../utils/telegram';
 
 interface PlayerContextType {
   // Данные
@@ -58,6 +59,9 @@ interface PlayerContextType {
   resetSearch: () => void;
   // User State
   user: User | null;
+  // Favorites
+  favorites: Track[];
+  toggleFavorite: (track: Track) => Promise<void>;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
@@ -80,6 +84,25 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('none');
   const [isShuffle, setIsShuffle] = useState(false);
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
+
+  // Favorites State
+  const [favorites, setFavorites] = useState<Track[]>([]);
+
+  const toggleFavorite = async (track: Track) => {
+    try {
+      const isFav = favorites.some(f => f.id === track.id);
+      if (isFav) {
+        await storage.removeFromFavorites(track.id);
+        setFavorites(prev => prev.filter(f => f.id !== track.id));
+      } else {
+        await storage.addToFavorites(track);
+        setFavorites(prev => [...prev, track]);
+      }
+      hapticFeedback.medium();
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+    }
+  };
 
   // Search State
   const [searchState, setSearchState] = useState({
@@ -192,6 +215,9 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         });
 
         const savedPlaylists = await storage.getAllPlaylists();
+        const loadedFavorites = await storage.getFavorites();
+        setFavorites(loadedFavorites);
+
         if (savedPlaylists.length > 0) {
           setPlaylists(prev => {
             const defaultIds = new Set(INITIAL_PLAYLISTS.map(p => p.id));
@@ -665,7 +691,9 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       searchState,
       setSearchState,
       resetSearch,
-      user
+      user,
+      favorites,
+      toggleFavorite
     }}>
       {children}
     </PlayerContext.Provider>

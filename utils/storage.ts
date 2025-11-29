@@ -21,10 +21,17 @@ interface MusicDB extends DBSchema {
         };
         indexes: { 'by-date': number };
     };
+    favorites: {
+        key: string;
+        value: Track & {
+            savedAt: number;
+        };
+        indexes: { 'by-date': number };
+    };
 }
 
 const DB_NAME = 'tg-music-player-db';
-const DB_VERSION = 4; // Increment version
+const DB_VERSION = 5; // Increment version
 
 class StorageService {
     private dbPromise: Promise<IDBPDatabase<MusicDB>>;
@@ -41,7 +48,10 @@ class StorageService {
                     const playlistStore = db.createObjectStore('playlists', { keyPath: 'id' });
                     playlistStore.createIndex('by-date', 'createdAt');
                 }
-                // Version 4 upgrade: nothing schema-breaking, just added optional fields
+                if (oldVersion < 5) {
+                    const favoriteStore = db.createObjectStore('favorites', { keyPath: 'id' });
+                    favoriteStore.createIndex('by-date', 'savedAt');
+                }
             },
             blocked(currentVersion, blockedVersion, event) {
                 console.warn("DB Open Blocked: Another tab has the DB open", currentVersion, blockedVersion);
@@ -120,6 +130,35 @@ class StorageService {
 
     async updatePlaylist(playlist: Playlist): Promise<void> {
         await this.savePlaylist(playlist);
+    }
+
+    // Favorites methods
+
+    async addToFavorites(track: Track): Promise<void> {
+        const db = await this.dbPromise;
+        await db.put('favorites', {
+            ...track,
+            savedAt: Date.now()
+        });
+    }
+
+    async removeFromFavorites(id: string): Promise<void> {
+        const db = await this.dbPromise;
+        await db.delete('favorites', id);
+    }
+
+    async getFavorites(): Promise<Track[]> {
+        const db = await this.dbPromise;
+        const favorites = await db.getAllFromIndex('favorites', 'by-date');
+        // Favorites are just metadata, so no blob handling needed usually, 
+        // but we return them as Tracks
+        return favorites.map(({ savedAt, ...track }) => track);
+    }
+
+    async isFavorite(id: string): Promise<boolean> {
+        const db = await this.dbPromise;
+        const track = await db.get('favorites', id);
+        return !!track;
     }
 }
 
