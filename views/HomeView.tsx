@@ -174,14 +174,7 @@ const HomeView: React.FC = () => {
 
 
 
-  const handleRadioPlay = (station: RadioStation) => {
-    hapticFeedback.light();
-    if (isRadioMode && currentRadio?.id === station.id) {
-      togglePlay();
-    } else {
-      playRadio(station);
-    }
-  };
+
 
   return (
     <div className="px-4 py-8 space-y-8 animate-fade-in-up pb-24">
@@ -370,79 +363,7 @@ const HomeView: React.FC = () => {
         </div>
       )}
 
-      {/* Radio Stations Section - Only show when not searching */}
-      {!searchState.query.trim() && searchState.results.length === 0 && !searchState.isSearching && (
-        <div>
-          <h3 className="text-lg font-semibold mb-4 text-gray-100 flex items-center gap-2">
-            <Radio size={20} className="text-blue-400" />
-            Радио
-          </h3>
 
-          {isLoadingRadio ? (
-            <div className="flex justify-center py-8">
-              <Loader size={32} className="animate-spin text-blue-400" />
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                {radioStations.slice(0, showAllRadio ? undefined : 6).map((station) => {
-                  const isCurrentStation = isRadioMode && currentRadio?.id === station.id;
-                  return (
-                    <button
-                      key={station.id}
-                      onClick={() => handleRadioPlay(station)}
-                      className={`relative p-4 rounded-xl transition-all ${isCurrentStation
-                        ? 'bg-gradient-to-br from-blue-500/20 to-purple-500/20 border-2 border-blue-400'
-                        : 'bg-white/5 border border-white/10 hover:bg-white/10'
-                        }`}
-                    >
-                      <div className="aspect-square rounded-lg overflow-hidden mb-3 relative">
-                        <img
-                          src={station.image}
-                          alt={station.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(station.name)}&size=200&background=random`;
-                          }}
-                        />
-                        {isCurrentStation && isPlaying && (
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                            <div className="flex space-x-1 items-end h-4">
-                              <div className="w-1 bg-blue-400 animate-pulse h-2"></div>
-                              <div className="w-1 bg-blue-400 animate-pulse h-4" style={{ animationDelay: '0.2s' }}></div>
-                              <div className="w-1 bg-blue-400 animate-pulse h-3" style={{ animationDelay: '0.4s' }}></div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <h4 className={`text-sm font-semibold truncate ${isCurrentStation ? 'text-blue-400' : 'text-white'
-                        }`}>
-                        {station.name}
-                      </h4>
-                      <p className="text-xs text-gray-400 truncate">{station.genre}</p>
-                      {isCurrentStation && (
-                        <div className="absolute top-2 right-2 px-2 py-1 bg-red-500 rounded-full text-[10px] font-bold text-white flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span>
-                          LIVE
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {radioStations.length > 6 && (
-                <button
-                  onClick={() => setShowAllRadio(!showAllRadio)}
-                  className="w-full py-3 bg-white/5 rounded-xl text-sm font-medium text-gray-300 hover:bg-white/10 transition-colors"
-                >
-                  {showAllRadio ? 'Свернуть' : 'Показать все станции'}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Track List - Only show when searching */}
       {

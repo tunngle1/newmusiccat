@@ -412,8 +412,8 @@ class HitmoParser:
                 'genre': 'Рок',
                 'url': 'https://maximum.hostingradio.ru/maximum96.aacp',
                 'image': 'https://cdn-radiotime-logos.tunein.com/s6886q.png'
-            }
-        ]
+            },
+            {
                 'id': 'radio7',
                 'name': 'Радио 7',
                 'genre': 'Поп',
