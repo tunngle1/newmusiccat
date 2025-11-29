@@ -4,6 +4,8 @@ import { usePlayer } from '../context/PlayerContext';
 import { formatTime } from '../utils/format';
 import { getLyrics } from '../utils/api';
 import LyricsModal from './LyricsModal';
+import MarqueeText from './MarqueeText';
+
 
 interface FullPlayerProps {
   onCollapse: () => void;
@@ -25,7 +27,8 @@ const FullPlayer: React.FC<FullPlayerProps> = ({ onCollapse }) => {
     toggleRepeat,
     isShuffle,
     toggleShuffle,
-    downloadTrack
+    downloadTrack,
+    setSearchState
   } = usePlayer();
 
   // Lyrics state
@@ -107,13 +110,35 @@ const FullPlayer: React.FC<FullPlayerProps> = ({ onCollapse }) => {
         {/* Track Info & Controls */}
         <div className="w-full px-8 pb-12 flex flex-col space-y-8">
 
-          <div className="flex justify-between items-end">
-            <div className="space-y-2 flex-1 mr-4">
-              <h2 className="text-2xl font-bold text-white truncate leading-tight text-glow">{title}</h2>
-              <p className="text-lg text-white/60 font-medium truncate">{subtitle}</p>
+          <div className="flex justify-between items-start gap-4">
+            <div className="space-y-2 flex-1 min-w-0">
+              <MarqueeText
+                text={title || ''}
+                className="text-2xl font-bold text-white leading-tight text-glow"
+              />
+              <div
+                onClick={() => {
+                  if (!isRadioMode && currentTrack) {
+                    onCollapse();
+                    setSearchState(prev => ({
+                      ...prev,
+                      query: currentTrack.artist,
+                      isArtistSearch: true,
+                      results: [],
+                      genreId: null
+                    }));
+                  }
+                }}
+                className={!isRadioMode ? "cursor-pointer hover:text-blue-400 transition-colors" : ""}
+              >
+                <MarqueeText
+                  text={subtitle || ''}
+                  className="text-lg text-white/60 font-medium leading-snug"
+                />
+              </div>
             </div>
             {!isRadioMode && currentTrack && (
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-shrink-0">
                 <button
                   onClick={handleShowLyrics}
                   className="p-3 rounded-full glass-button text-white/80 hover:text-white hover:bg-white/10 transition-all active:scale-95"

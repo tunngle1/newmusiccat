@@ -1,13 +1,14 @@
 import React from 'react';
 import { Play, Pause, Radio } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
+import MarqueeText from './MarqueeText';
 
 interface MiniPlayerProps {
   onExpand: () => void;
 }
 
 const MiniPlayer: React.FC<MiniPlayerProps> = ({ onExpand }) => {
-  const { currentTrack, currentRadio, isRadioMode, isPlaying, togglePlay, duration, currentTime } = usePlayer();
+  const { currentTrack, currentRadio, isRadioMode, isPlaying, togglePlay, duration, currentTime, setSearchState } = usePlayer();
 
   if (!currentTrack && !currentRadio) return null;
 
@@ -41,14 +42,33 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({ onExpand }) => {
       </div>
 
       <div className="flex-1 min-w-0 pr-4">
-        <div className="flex items-center gap-2">
-          <h4 className="text-white text-sm font-bold truncate text-glow">
-            {isRadioMode ? currentRadio?.name : currentTrack?.title}
-          </h4>
+        <div onClick={onExpand}>
+          <MarqueeText
+            text={isRadioMode ? currentRadio?.name || '' : currentTrack?.title || ''}
+            className="text-white text-sm font-bold text-glow"
+          />
         </div>
-        <p className="text-white/60 text-xs truncate font-medium">
-          {isRadioMode ? currentRadio?.genre : currentTrack?.artist}
-        </p>
+        <div
+          onClick={(e) => {
+            if (!isRadioMode && currentTrack) {
+              e.stopPropagation();
+              onExpand();
+              setSearchState(prev => ({
+                ...prev,
+                query: currentTrack.artist,
+                isArtistSearch: true,
+                results: [],
+                genreId: null
+              }));
+            }
+          }}
+          className={!isRadioMode ? "cursor-pointer hover:text-blue-400 transition-colors" : ""}
+        >
+          <MarqueeText
+            text={isRadioMode ? currentRadio?.genre || '' : currentTrack?.artist || ''}
+            className="text-white/60 text-xs font-medium"
+          />
+        </div>
       </div>
 
       <button

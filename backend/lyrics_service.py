@@ -53,15 +53,34 @@ class LyricsService:
                 print(f"No results found for: {artist} - {title}")
                 return None
             
-            # Get the first result
-            song_info = data['response']['hits'][0]['result']
-            song_url = song_info.get('url')
+            # Try to find the best match
+            best_match = None
+            artist_lower = artist.lower()
+            title_lower = title.lower()
+            
+            for hit in data['response']['hits'][:5]:  # Check first 5 results
+                result = hit['result']
+                result_artist = result.get('primary_artist', {}).get('name', '').lower()
+                result_title = result.get('title', '').lower()
+                
+                # Check if artist matches
+                if artist_lower in result_artist or result_artist in artist_lower:
+                    # Check if title matches
+                    if title_lower in result_title or result_title in title_lower:
+                        best_match = result
+                        break
+            
+            if not best_match:
+                # Fallback to first result
+                best_match = data['response']['hits'][0]['result']
+            
+            song_url = best_match.get('url')
             
             if not song_url:
                 print("No song URL found")
                 return None
             
-            print(f"Found song: {song_info.get('title')} by {song_info.get('primary_artist', {}).get('name')}")
+            print(f"Found song: {best_match.get('title')} by {best_match.get('primary_artist', {}).get('name')}")
             
             # 2. Scrape lyrics from the song page
             lyrics = self._scrape_lyrics(song_url)
@@ -158,17 +177,31 @@ class LyricsService:
             if re.match(r'^Read More$', line, re.IGNORECASE):
                 continue
             
-            # Filter out track description (starts with quote, contains "is the", "is a", "is about")
-            if re.match(r'^["“].*?["”]\s+is\s+(the|a|about)', line, re.IGNORECASE):
+            # Filter out track descriptions (multiple patterns)
+            # Pattern 1: Starts with quote, contains "is the", "is a", "is about"
+            if re.match(r'^[\""].*?[\""]?\s+is\s+(the|a|about)', line, re.IGNORECASE):
+                continue
+            # Pattern 2: Contains "…" (ellipsis) - often part of descriptions
+            if '…' in line and len(line) > 100:
+                continue
+            # Pattern 3: Ends with ellipsis
+            if line.endswith('…'):
                 continue
                 
             # Common languages headers and garbage
             garbage_lines = [
                 'English', 'Russian', 'Español', 'Deutsch', 'Français', 'Italiano', 'Português',
                 'Slovenčina', 'Ελληνικά', 'فارسی', 'Magyar', 'Türkçe', 'Русский (Russian)', 
-                'Română', 'Polski', 'Українська', '日本語', '한국어'
+                'Română', 'Polski', 'Українська', '日本語', '한국어',
+                'العربية', 'Svenska', 'azərbaycan', 'עברית', 'हिन्दी', 'srpski',
+                'Česky', 'Македонски', 'עברית (Hebrew)'
             ]
             if line in garbage_lines:
+                continue
+
+            # Filter out bracketed annotations (improved pattern)
+            # Matches: [Verse 1], [Chorus], [Pont : version 1], [Couplet 1 : Tito Prince], etc.
+            if re.match(r'^\[.+\]$', line):
                 continue
                 
             # "Song Title Lyrics" header
