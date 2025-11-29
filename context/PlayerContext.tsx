@@ -66,6 +66,7 @@ interface PlayerContextType {
   // Favorite Radios
   favoriteRadios: Set<string>;
   toggleFavoriteRadio: (radioId: string) => Promise<void>;
+  markTrackAsDownloaded: (trackId: string) => void;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
@@ -799,17 +800,10 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       await storage.saveTrack(track, audioBlob, coverBlob);
 
       setDownloadedTracks(prev => new Set(prev).add(track.id));
-      console.log("Track downloaded successfully");
-
-      // Haptic feedback
-      if (window.Telegram?.WebApp?.HapticFeedback) {
-        window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
-      }
+      setDownloadQueue(prev => prev.slice(1));
     } catch (e) {
-      console.error("Download error:", e);
-      if (window.Telegram?.WebApp?.HapticFeedback) {
-        window.Telegram.WebApp.HapticFeedback.notificationOccurred('error');
-      }
+      console.error("Download failed:", e);
+      setDownloadQueue(prev => prev.slice(1));
     } finally {
       setIsDownloading(null);
     }
@@ -886,7 +880,8 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       favorites,
       toggleFavorite,
       favoriteRadios,
-      toggleFavoriteRadio
+      toggleFavoriteRadio,
+      markTrackAsDownloaded
     }}>
       {children}
     </PlayerContext.Provider>

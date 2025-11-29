@@ -1,11 +1,11 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Upload, FileAudio, Music2, Trash2, Play } from 'lucide-react';
+import { Upload, FileAudio, Music2, Trash2, Play, Loader2 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { Track } from '../types';
 import { storage } from '../utils/storage';
 
 const LibraryView: React.FC = () => {
-  const { addTrack, playTrack, currentTrack, isPlaying, removeDownloadedTrack, togglePlay } = usePlayer();
+  const { addTrack, playTrack, currentTrack, isPlaying, removeDownloadedTrack, togglePlay, markTrackAsDownloaded } = usePlayer();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [libraryTracks, setLibraryTracks] = useState<Track[]>([]);
   const [storageInfo, setStorageInfo] = useState<{
@@ -19,6 +19,8 @@ const LibraryView: React.FC = () => {
   // YouTube State
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [isYoutubeLoading, setIsYoutubeLoading] = useState(false);
+  const [isDownloadingApp, setIsDownloadingApp] = useState(false);
+  const [isDownloadingChat, setIsDownloadingChat] = useState(false);
   const [foundYoutubeTrack, setFoundYoutubeTrack] = useState<Track | null>(null);
 
   const handleYoutubeSearch = async () => {
@@ -43,10 +45,10 @@ const LibraryView: React.FC = () => {
 
   const handleYoutubeDownload = async (target: 'app' | 'chat') => {
     if (!foundYoutubeTrack) return;
-    setIsYoutubeLoading(true);
 
     try {
       if (target === 'app') {
+        setIsDownloadingApp(true);
         // Download to App via Proxy to avoid CORS
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
         const proxyUrl = `${apiUrl}/api/stream?url=${encodeURIComponent(foundYoutubeTrack.url)}`;
@@ -73,12 +75,14 @@ const LibraryView: React.FC = () => {
 
         addTrack(newTrack);
         await storage.saveTrack(newTrack, audioBlob, coverBlob);
+        markTrackAsDownloaded(newTrack.id); // Update context state
 
         setLibraryTracks(prev => [newTrack, ...prev]);
         setYoutubeUrl('');
         setFoundYoutubeTrack(null);
         alert('Трек сохранен в медиатеку!');
       } else {
+        setIsDownloadingChat(true);
         // Download to Chat
         const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
         if (!user) {
@@ -103,7 +107,8 @@ const LibraryView: React.FC = () => {
     } catch (e) {
       alert('Ошибка загрузки: ' + e);
     } finally {
-      setIsYoutubeLoading(false);
+      setIsDownloadingApp(false);
+      setIsDownloadingChat(false);
     }
   };
 
@@ -235,9 +240,9 @@ const LibraryView: React.FC = () => {
           <button
             onClick={handleYoutubeSearch}
             disabled={isYoutubeLoading || !youtubeUrl}
-            className="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            className="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-4 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
           >
-            {isYoutubeLoading ? '...' : 'Найти'}
+            {isYoutubeLoading ? <Loader2 size={16} className="animate-spin" /> : 'Найти'}
           </button>
         </div>
 
@@ -251,17 +256,19 @@ const LibraryView: React.FC = () => {
             <div className="flex gap-2">
               <button
                 onClick={() => handleYoutubeDownload('app')}
-                className="p-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30"
+                disabled={isDownloadingApp || isDownloadingChat}
+                className="p-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 disabled:opacity-50"
                 title="Скачать в приложение"
               >
-                <FileAudio size={18} />
+                {isDownloadingApp ? <Loader2 size={18} className="animate-spin" /> : <FileAudio size={18} />}
               </button>
               <button
                 onClick={() => handleYoutubeDownload('chat')}
-                className="p-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30"
+                disabled={isDownloadingApp || isDownloadingChat}
+                className="p-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 disabled:opacity-50"
                 title="Отправить в чат"
               >
-                <Upload size={18} />
+                {isDownloadingChat ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
               </button>
             </div>
           </div>
