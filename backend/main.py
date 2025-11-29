@@ -368,21 +368,55 @@ async def search_tracks(
             )
 
         # 2. Если нет в кэше, делаем запрос
-        tracks = await parser.search(q, limit=limit, page=page)
+        
+        # Если включена фильтрация, делаем глубокий поиск (скачиваем несколько страниц)
+        if by_artist or by_track:
+            print(f"DEBUG: Deep search enabled for query='{q}' (Artist={by_artist}, Track={by_track})")
+            all_tracks = []
+            # Скачиваем первые 3 страницы (Hitmo обычно отдает по 48 треков на страницу)
+            # Это ~144 трека, что должно хватить для нахождения нужного артиста
+            for p in range(1, 4):
+                try:
+                    print(f"DEBUG: Fetching page {p}...")
+                    page_tracks = await parser.search(q, limit=48, page=p)
+                    all_tracks.extend(page_tracks)
+                    if len(page_tracks) < 20: # Если вернулось мало треков, значит страницы кончились
+                        break
+                except Exception as e:
+                    print(f"DEBUG: Error fetching page {p}: {e}")
+                    break
+            
+            print(f"DEBUG: Total tracks fetched: {len(all_tracks)}")
+            tracks = all_tracks
+        else:
+            # Обычный поиск - одна страница
+            tracks = await parser.search(q, limit=limit, page=page)
+            print(f"DEBUG: Search query='{q}', limit={limit}, page={page}. Found {len(tracks)} tracks before filtering.")
         
         # Фильтрация по артисту или треку если запрошено
         query_lower = q.lower()
         
         if by_artist:
+            print(f"DEBUG: Filtering by artist. Query='{query_lower}'")
             tracks = [
                 track for track in tracks 
                 if query_lower in track['artist'].lower()
             ]
+            print(f"DEBUG: Found {len(tracks)} tracks after artist filtering.")
         elif by_track:
+            print(f"DEBUG: Filtering by track. Query='{query_lower}'")
             tracks = [
                 track for track in tracks 
                 if query_lower in track['title'].lower()
             ]
+            print(f"DEBUG: Found {len(tracks)} tracks after track filtering.")
+
+        # Пагинация для отфильтрованных результатов (если был глубокий поиск)
+        if by_artist or by_track:
+            start_idx = (page - 1) * limit
+            end_idx = start_idx + limit
+            tracks = tracks[start_idx:end_idx]
+            print(f"DEBUG: Returning slice [{start_idx}:{end_idx}] (Count: {len(tracks)})")
         
         # Конвертируем в Pydantic модели и оборачиваем URL в прокси
         track_models = []

@@ -268,7 +268,7 @@ const FullPlayer: React.FC<FullPlayerProps> = ({ onCollapse }) => {
           setSearchState(prev => ({
             ...prev,
             query: artist,
-            isArtistSearch: true,
+            searchMode: 'artist',
             results: [],
             genreId: null
           }));

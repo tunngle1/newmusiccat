@@ -214,7 +214,7 @@ const HomeView: React.FC = () => {
               hapticFeedback.light();
               setSearchState(prev => ({ ...prev, searchMode: 'all', results: [], page: 1 }));
             }}
-            className={`flex-1 min-w-[80px] py-2 px-3 rounded-xl text-sm font-semibold transition-all whitespace-nowrap glass-panel ${searchState.searchMode === 'all'
+            className={`flex-1 min-w-[60px] py-2 px-3 rounded-xl text-sm font-semibold transition-all whitespace-nowrap glass-panel ${searchState.searchMode === 'all'
               ? 'bg-white/20 text-white border-white/20'
               : 'text-gray-300 hover:bg-white/10'
               }`}
@@ -226,24 +226,24 @@ const HomeView: React.FC = () => {
               hapticFeedback.light();
               setSearchState(prev => ({ ...prev, searchMode: 'artist', results: [], page: 1 }));
             }}
-            className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl text-sm font-semibold transition-all whitespace-nowrap glass-panel ${searchState.searchMode === 'artist'
+            className={`flex-1 min-w-[100px] py-2 px-3 rounded-xl text-sm font-semibold transition-all whitespace-nowrap glass-panel ${searchState.searchMode === 'artist'
               ? 'bg-white/20 text-white border-white/20'
               : 'text-gray-300 hover:bg-white/10'
               }`}
           >
-            По исполнителю
+            Исполнитель
           </button>
           <button
             onClick={() => {
               hapticFeedback.light();
               setSearchState(prev => ({ ...prev, searchMode: 'track', results: [], page: 1 }));
             }}
-            className={`flex-1 min-w-[100px] py-2 px-3 rounded-xl text-sm font-semibold transition-all whitespace-nowrap glass-panel ${searchState.searchMode === 'track'
+            className={`flex-1 min-w-[90px] py-2 px-3 rounded-xl text-sm font-semibold transition-all whitespace-nowrap glass-panel ${searchState.searchMode === 'track'
               ? 'bg-white/20 text-white border-white/20'
               : 'text-gray-300 hover:bg-white/10'
               }`}
           >
-            По названию
+            Название
           </button>
         </div>
       )}
