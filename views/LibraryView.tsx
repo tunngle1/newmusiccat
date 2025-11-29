@@ -3,6 +3,7 @@ import { Upload, FileAudio, Music2, Trash2, Play, Loader2 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { Track } from '../types';
 import { storage } from '../utils/storage';
+import { API_BASE_URL } from '../constants';
 
 const LibraryView: React.FC = () => {
   const { addTrack, playTrack, currentTrack, isPlaying, removeDownloadedTrack, togglePlay, markTrackAsDownloaded } = usePlayer();
@@ -28,7 +29,7 @@ const LibraryView: React.FC = () => {
     setIsYoutubeLoading(true);
     setFoundYoutubeTrack(null);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/youtube/info`, {
+      const response = await fetch(`${API_BASE_URL}/api/youtube/info`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: youtubeUrl })
@@ -50,8 +51,7 @@ const LibraryView: React.FC = () => {
       if (target === 'app') {
         setIsDownloadingApp(true);
         // Download to App via Server File Download (Reliable)
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        const downloadUrl = `${apiUrl}/api/youtube/download_file?url=${encodeURIComponent(youtubeUrl)}`;
+        const downloadUrl = `${API_BASE_URL}/api/youtube/download_file?url=${encodeURIComponent(youtubeUrl)}`;
 
         const audioRes = await fetch(downloadUrl);
         if (!audioRes.ok) throw new Error('Failed to download audio file from server');
@@ -91,7 +91,7 @@ const LibraryView: React.FC = () => {
           return;
         }
 
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/download/chat`, {
+        const response = await fetch(`${API_BASE_URL}/api/download/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
