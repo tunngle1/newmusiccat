@@ -6,6 +6,7 @@ import { searchTracks, getGenreTracks, downloadToChat } from '../utils/api';
 import { hapticFeedback, getTelegramUser } from '../utils/telegram';
 import { deduplicateTracks } from '../utils/deduplication';
 import SubscriptionBadge from '../components/SubscriptionBadge';
+import PaymentView from '../views/PaymentView';
 
 const HomeView: React.FC = () => {
   const {
@@ -32,6 +33,7 @@ const HomeView: React.FC = () => {
   const [trackToAction, setTrackToAction] = useState<Track | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [showAllGenres, setShowAllGenres] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
 
   // Scroll restoration
   useEffect(() => {
@@ -199,7 +201,22 @@ const HomeView: React.FC = () => {
         <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs">
           TG
         </div>
+
+        <button
+          onClick={() => setShowPayment(true)}
+          className="px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs font-bold shadow-lg hover:scale-105 transition-transform flex items-center gap-1"
+        >
+          <span className="text-yellow-300">★</span>
+          Premium
+        </button>
       </div>
+
+      {showPayment && (
+        <PaymentView
+          user={user}
+          onClose={() => setShowPayment(false)}
+        />
+      )}
 
       {/* Subscription Badge - только для пробного периода */}
       <SubscriptionBadge user={user} />

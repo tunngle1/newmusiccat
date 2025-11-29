@@ -13,14 +13,16 @@ from datetime import datetime
 
 try:
     from backend.hitmo_parser_light import HitmoParser
-    from backend.database import User, DownloadedMessage, Lyrics, get_db, init_db
+    from backend.database import User, DownloadedMessage, Lyrics, get_db, init_db, SessionLocal
     from backend.cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from backend.lyrics_service import LyricsService
+    from backend.payments import create_stars_invoice, verify_ton_transaction, grant_premium_after_payment
 except ImportError:
     from hitmo_parser_light import HitmoParser
-    from database import User, DownloadedMessage, Lyrics, get_db, init_db
+    from database import User, DownloadedMessage, Lyrics, get_db, init_db, SessionLocal
     from cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from lyrics_service import LyricsService
+    from payments import create_stars_invoice, verify_ton_transaction, grant_premium_after_payment
 
 import os
 from dotenv import load_dotenv
@@ -53,12 +55,23 @@ class UserAuth(BaseModel):
     username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    auth_date: int
+    hash: str
 
 class UserStats(BaseModel):
     total_users: int
     premium_users: int
     admin_users: int
     new_users_today: int
+
+class CreateInvoiceRequest(BaseModel):
+    user_id: int
+    plan: str  # 'month' or 'year'
+
+class TonVerificationRequest(BaseModel):
+    user_id: int
+    plan: str
+    boc: str # Bag of Cells (транзакция)
 
 class GrantRequest(BaseModel):
     user_id: int
@@ -128,10 +141,7 @@ if GENIUS_API_TOKEN:
     except Exception as e:
         print(f"❌ Failed to initialize lyrics service: {e}")
 
-@app.on_event("startup")
-async def startup_event():
-    """Инициализация БД при старте"""
-    init_db()
+
 
 @app.get("/")
 async def root():
@@ -392,25 +402,24 @@ async def grant_rights(
         
     db.commit()
     
-    # Если премиум был отозван, запланировать удаление треков через 1 минуту (для тестирования)
+    # Если премиум был отозван, запланировать удаление треков через 24 часа
     if was_premium and (request.is_premium == False or request.is_premium_pro == False):
-        # Установить таймер на удаление через 1 минуту
+        # Установить таймер на удаление через 24 часа
         now = datetime.utcnow()
         target_user.subscription_expired_at = now
-        target_user.tracks_deletion_scheduled_at = now + timedelta(minutes=1)  # Изменено на 1 минуту для тестирования
+        target_user.tracks_deletion_scheduled_at = now + timedelta(hours=24)
         db.commit()
         
-        print(f"⚠️ Premium revoked for user {request.user_id}, tracks will be deleted in 1 minute")
+        print(f"⚠️ Premium revoked for user {request.user_id}, tracks will be deleted in 24 hours")
         
         # Отправить уведомление пользователю
         if BOT_TOKEN:
             try:
                 message = (
                     "⚠️ <b>Ваша подписка истекла</b>\n\n"
-                    "Все скачанные треки будут удалены через 1 минуту (тестовый режим).\n"
+                    "Все скачанные треки будут удалены через 24 часа.\n"
                     "Оформите подписку, чтобы сохранить их!\n\n"
-                    "💎 <b>Premium</b> - треки защищены от пересылки\n"
-                    "👑 <b>Premium Pro</b> - можно пересылать треки друзьям"
+                    "💎 <b>Premium</b> - треки защищены от пересылки"
                 )
                 
                 print(f"📤 Sending notification to user {request.user_id}...")
@@ -433,6 +442,135 @@ async def grant_rights(
             print(f"⚠️ BOT_TOKEN not configured, skipping notification")
     
     return {"status": "ok", "message": f"Rights updated for user {request.user_id}"}
+
+# --- Background Tasks ---
+
+import asyncio
+
+async def background_deletion_task():
+    """Фоновая задача для удаления треков"""
+    print("🔄 Background deletion task started")
+    while True:
+        try:
+            # Создаем новую сессию БД
+            db = SessionLocal()
+            now = datetime.utcnow()
+            
+            # Ищем пользователей, у которых подошло время удаления треков
+            users_to_clean = db.query(User).filter(
+                User.tracks_deletion_scheduled_at <= now
+            ).all()
+            
+            for user in users_to_clean:
+                print(f"🗑️ Deleting tracks for user {user.id} (Scheduled: {user.tracks_deletion_scheduled_at})")
+                
+                if BOT_TOKEN:
+                    # Получаем все скачанные сообщения
+                    messages = db.query(DownloadedMessage).filter(DownloadedMessage.user_id == user.id).all()
+                    
+                    if messages:
+                        telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage"
+                        deleted_count = 0
+                        
+                        async with httpx.AsyncClient(timeout=30.0) as client:
+                            for msg in messages:
+                                try:
+                                    response = await client.post(telegram_url, json={
+                                        'chat_id': msg.chat_id,
+                                        'message_id': msg.message_id
+                                    })
+                                    if response.status_code == 200:
+                                        deleted_count += 1
+                                except Exception as e:
+                                    print(f"Failed to delete message {msg.message_id}: {e}")
+                        
+                        # Удаляем записи из БД
+                        db.query(DownloadedMessage).filter(DownloadedMessage.user_id == user.id).delete()
+                        print(f"✅ Deleted {deleted_count} messages for user {user.id}")
+                
+                # Сбрасываем время удаления
+                user.tracks_deletion_scheduled_at = None
+                db.commit()
+            
+            db.close()
+            
+        except Exception as e:
+            print(f"❌ Error in background deletion task: {e}")
+        
+        # Проверяем каждые 10 секунд (для теста)
+        await asyncio.sleep(10)
+
+@app.on_event("startup")
+async def startup_event():
+    init_db()
+    # Запускаем фоновую задачу
+    asyncio.create_task(background_deletion_task())
+
+# --- Payment Endpoints ---
+
+@app.post("/api/payment/stars/create")
+async def create_stars_invoice_endpoint(request: CreateInvoiceRequest):
+    """Создание инвойса для Telegram Stars"""
+    try:
+        result = await create_stars_invoice(request.user_id, request.plan)
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/payment/ton/verify")
+async def verify_ton_payment(request: TonVerificationRequest, db: Session = Depends(get_db)):
+    """Проверка оплаты TON"""
+    try:
+        is_valid = await verify_ton_transaction(request.boc, request.user_id, request.plan)
+        
+        if is_valid:
+            grant_premium_after_payment(db, request.user_id, request.plan, "ton")
+            return {"status": "ok", "message": "Payment verified and premium granted"}
+        else:
+            raise HTTPException(status_code=400, detail="Invalid transaction")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/webhook/telegram")
+async def telegram_webhook(update: Dict[str, Any] = Body(...), db: Session = Depends(get_db)):
+    """Вебхук для обработки обновлений от Telegram (включая оплату Stars)"""
+    try:
+        # Обработка PreCheckoutQuery (проверка перед оплатой)
+        if "pre_checkout_query" in update:
+            query = update["pre_checkout_query"]
+            query_id = query["id"]
+            
+            # Всегда подтверждаем
+            telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/answerPreCheckoutQuery"
+            async with httpx.AsyncClient() as client:
+                await client.post(telegram_url, json={
+                    "pre_checkout_query_id": query_id,
+                    "ok": True
+                })
+            return {"status": "ok"}
+            
+        # Обработка SuccessfulPayment (успешная оплата)
+        if "message" in update and "successful_payment" in update["message"]:
+            payment = update["message"]["successful_payment"]
+            user_id = update["message"]["from"]["id"]
+            payload = payment["invoice_payload"] # stars_month_12345_timestamp
+            
+            # Парсим payload
+            parts = payload.split("_")
+            if len(parts) >= 2:
+                plan = parts[1] # month или year
+                grant_premium_after_payment(db, user_id, plan, "stars")
+                print(f"✅ Premium granted to user {user_id} via Stars ({plan})")
+                
+            return {"status": "ok"}
+            
+        return {"status": "ok", "message": "Update ignored"}
+        
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        # Не возвращаем ошибку Telegram, чтобы он не слал повторы бесконечно
+        return {"status": "ok"}
 
 # --- Cache Admin Endpoints ---
 

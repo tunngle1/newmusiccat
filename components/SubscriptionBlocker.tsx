@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { User } from '../types';
+import PaymentView from '../views/PaymentView';
 
 interface SubscriptionBlockerProps {
     user: User | null;
@@ -7,6 +8,8 @@ interface SubscriptionBlockerProps {
 }
 
 const SubscriptionBlocker: React.FC<SubscriptionBlockerProps> = ({ user, onRefresh }) => {
+    const [showPayment, setShowPayment] = useState(false);
+
     const handleContactAdmin = () => {
         if (window.Telegram?.WebApp?.showAlert) {
             window.Telegram.WebApp.showAlert('Для получения премиум-подписки свяжитесь с администратором через бота');
@@ -68,6 +71,20 @@ const SubscriptionBlocker: React.FC<SubscriptionBlockerProps> = ({ user, onRefre
                     </p>
 
                     <div className="space-y-3 pt-4">
+                        {!isBlocked && (
+                            <button
+                                onClick={() => setShowPayment(true)}
+                                className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold text-lg hover:scale-105 transition-transform shadow-lg shadow-blue-500/20"
+                            >
+                                <div className="flex items-center justify-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                                    </svg>
+                                    Оформить подписку
+                                </div>
+                            </button>
+                        )}
+
                         <button
                             onClick={handleContactAdmin}
                             className="w-full glass-button py-4 px-6 rounded-xl text-white font-semibold text-lg hover:scale-105 transition-transform"
@@ -98,15 +115,21 @@ const SubscriptionBlocker: React.FC<SubscriptionBlockerProps> = ({ user, onRefre
                     {user && (
                         <div className="mt-6 pt-6 border-t border-white/10 text-sm text-gray-500">
                             <p>ID: {user.id}</p>
-                            {user.subscription_status?.reason && (
-                                <p className="capitalize">Статус: {user.subscription_status.reason}</p>
-                            )}
+                            <p>@{user.username}</p>
                         </div>
                     )}
                 </div>
             </div>
+
+            {showPayment && (
+                <PaymentView
+                    user={user}
+                    onClose={() => setShowPayment(false)}
+                />
+            )}
         </div>
     );
 };
+
 
 export default SubscriptionBlocker;

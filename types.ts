@@ -23,6 +23,23 @@ export interface RadioStation {
   image: string;
 }
 
+export interface SubscriptionPlan {
+  id: 'month' | 'year';
+  name: string;
+  priceStars: number;
+  priceTon: number;
+  duration: string;
+  features: string[];
+}
+
+export interface SubscriptionStatus {
+  has_access: boolean;
+  reason: 'admin' | 'premium' | 'premium_pro' | 'trial' | 'expired' | 'blocked';
+  trial_expires_at?: string;
+  premium_expires_at?: string;
+  days_left?: number;
+}
+
 export interface User {
   id: number;
   username?: string;
@@ -31,13 +48,8 @@ export interface User {
   is_admin: boolean;
   is_premium: boolean;
   is_premium_pro: boolean;
-  subscription_status?: {
-    has_access: boolean;
-    reason: 'admin' | 'premium' | 'premium_pro' | 'trial' | 'expired' | 'blocked';
-    trial_expires_at?: string;
-    premium_expires_at?: string;
-    days_left?: number;
-  };
+  is_blocked: boolean;
+  subscription_status?: SubscriptionStatus;
 }
 
 export interface Lyrics {
