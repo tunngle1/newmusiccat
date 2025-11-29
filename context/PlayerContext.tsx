@@ -191,7 +191,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       playTrack(currentQueue[currentIndex + 1]);
     } else if (currentSearchState.hasMore && !currentSearchState.isSearching && (currentSearchState.query.trim() || currentSearchState.genreId)) {
       console.log("End of queue reached, loading more tracks...");
-      
+
       try {
         const nextPage = currentSearchState.page + 1;
         let newTracks: Track[] = [];
@@ -236,7 +236,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const prevTrack = () => {
     const currentTrackVal = currentTrackRef.current;
     const currentQueue = queueRef.current;
-    
+
     if (!currentTrackVal || currentQueue.length === 0) return;
     const audio = audioRef.current;
 
@@ -552,85 +552,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const togglePlay = () => setIsPlaying(!isPlaying);
 
-  const nextTrack = async () => {
-    if (!currentTrack || queue.length === 0) return;
 
-    if (isShuffle) {
-      // Random track logic
-      const randomIndex = Math.floor(Math.random() * queue.length);
-      playTrack(queue[randomIndex]);
-      return;
-    }
-
-    const currentIndex = queue.findIndex(t => t.id === currentTrack.id);
-
-    if (currentIndex < queue.length - 1) {
-      playTrack(queue[currentIndex + 1]);
-    } else if (searchState.hasMore && !searchState.isSearching && (searchState.query.trim() || searchState.genreId)) {
-      // Load more tracks logic
-      console.log("End of queue reached, loading more tracks...");
-
-      try {
-        const nextPage = searchState.page + 1;
-        let newTracks: Track[] = [];
-
-        if (searchState.genreId) {
-          newTracks = await getGenreTracks(searchState.genreId, 20, nextPage);
-        } else {
-          newTracks = await searchTracks(searchState.query, searchState.searchMode, 20, nextPage);
-        }
-
-        if (newTracks.length > 0) {
-          // Update search state
-          setSearchState(prev => ({
-            ...prev,
-            results: [...prev.results, ...newTracks],
-            page: nextPage,
-            hasMore: newTracks.length >= 20
-          }));
-
-          // Update queue and play next
-          const updatedQueue = [...queue, ...newTracks];
-          setQueue(updatedQueue);
-          playTrack(newTracks[0], updatedQueue); // Pass updated queue to ensure consistency
-        } else {
-          setSearchState(prev => ({ ...prev, hasMore: false }));
-          // Fallback to repeat all if no more tracks
-          if (repeatMode === 'all') {
-            playTrack(queue[0]);
-          } else {
-            setIsPlaying(false);
-            if (audioRef.current) audioRef.current.currentTime = 0;
-          }
-        }
-      } catch (e) {
-        console.error("Failed to load more tracks:", e);
-      }
-    } else if (repeatMode === 'all') {
-      playTrack(queue[0]);
-    } else {
-      setIsPlaying(false);
-      if (audioRef.current) audioRef.current.currentTime = 0;
-    }
-  };
-
-  const prevTrack = () => {
-    if (!currentTrack || queue.length === 0) return;
-    const audio = audioRef.current;
-
-    // Если прошло более 3 секунд, возвращаемся в начало трека
-    if (audio && audio.currentTime > 3) {
-      audio.currentTime = 0;
-      return;
-    }
-
-    const currentIndex = queue.findIndex(t => t.id === currentTrack.id);
-    if (currentIndex > 0) {
-      playTrack(queue[currentIndex - 1]);
-    } else {
-      playTrack(queue[queue.length - 1]); // Loop back to last
-    }
-  };
 
   const seek = (time: number) => {
     if (audioRef.current) {
