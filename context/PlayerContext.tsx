@@ -286,49 +286,39 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
       if (currentRepeatMode === 'one') {
         audio.currentTime = 0;
-        audio.play();
+        audio.play().catch(e => console.error("Repeat play error:", e));
+        return; // Important: return here to prevent other logic
+      }
+
+      // Logic from nextTrack, but using refs
+      if (!currentTrackVal || currentQueue.length === 0) return;
+
+      if (isShuffleVal) {
+        const randomIndex = Math.floor(Math.random() * currentQueue.length);
+        const nextTrack = currentQueue[randomIndex];
+        setCurrentTrack(nextTrack);
+        setCurrentRadio(null);
+        setIsRadioMode(false);
+        setIsPlaying(true);
+        return;
+      }
+
+      const currentIndex = currentQueue.findIndex(t => t.id === currentTrackVal.id);
+      if (currentIndex < currentQueue.length - 1) {
+        const nextTrack = currentQueue[currentIndex + 1];
+        setCurrentTrack(nextTrack);
+        setCurrentRadio(null);
+        setIsRadioMode(false);
+        setIsPlaying(true);
+      } else if (currentRepeatMode === 'all') {
+        const nextTrack = currentQueue[0];
+        setCurrentTrack(nextTrack);
+        setCurrentRadio(null);
+        setIsRadioMode(false);
+        setIsPlaying(true);
       } else {
-        // Logic from nextTrack, but using refs
-        if (!currentTrackVal || currentQueue.length === 0) return;
-
-        if (isShuffleVal) {
-          const randomIndex = Math.floor(Math.random() * currentQueue.length);
-          // We can't call playTrack directly because it's not in ref, but we can call the function from scope?
-          // Yes, playTrack is stable? No, playTrack depends on state setters.
-          // But handleEnded is created ONCE. playTrack is recreated.
-          // So we CANNOT call playTrack from here if we want fresh closure.
-          // We need to trigger next track via state update or something.
-          // Actually, we can just call setQueue/setCurrentTrack directly?
-          // Or better: use a ref for playTrack?
-          // Or just emit an event?
-
-          // Let's use a workaround: call a method that is updated in a ref?
-          // Or just duplicate logic:
-          const nextTrack = currentQueue[randomIndex];
-          setCurrentTrack(nextTrack);
-          setCurrentRadio(null);
-          setIsRadioMode(false);
-          setIsPlaying(true);
-          return;
-        }
-
-        const currentIndex = currentQueue.findIndex(t => t.id === currentTrackVal.id);
-        if (currentIndex < currentQueue.length - 1) {
-          const nextTrack = currentQueue[currentIndex + 1];
-          setCurrentTrack(nextTrack);
-          setCurrentRadio(null);
-          setIsRadioMode(false);
-          setIsPlaying(true);
-        } else if (currentRepeatMode === 'all') {
-          const nextTrack = currentQueue[0];
-          setCurrentTrack(nextTrack);
-          setCurrentRadio(null);
-          setIsRadioMode(false);
-          setIsPlaying(true);
-        } else {
-          setIsPlaying(false);
-          audio.currentTime = 0;
-        }
+        setIsPlaying(false);
+        audio.currentTime = 0;
       }
     };
     const handleError = (e: Event) => {

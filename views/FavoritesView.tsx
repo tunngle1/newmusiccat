@@ -8,6 +8,11 @@ const FavoritesView: React.FC = () => {
     const [showActionModal, setShowActionModal] = useState(false);
     const [trackToAction, setTrackToAction] = useState<any>(null);
 
+    // Scroll to top on mount
+    React.useEffect(() => {
+        window.scrollTo(0, 0);
+    }, []);
+
     const handlePlay = (track: any) => {
         hapticFeedback.light();
         playTrack(track, favorites);

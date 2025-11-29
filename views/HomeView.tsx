@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Play, MoreVertical, Search, Loader, Radio, Heart } from 'lucide-react';
+import { Play, MoreVertical, Search, Loader, Heart } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
-import { Track, RadioStation } from '../types';
-import { searchTracks, getGenreTracks, getRadioStations, downloadToChat } from '../utils/api';
+import { Track } from '../types';
+import { searchTracks, getGenreTracks, downloadToChat } from '../utils/api';
 import { hapticFeedback, getTelegramUser } from '../utils/telegram';
 import { deduplicateTracks } from '../utils/deduplication';
 
@@ -30,10 +30,22 @@ const HomeView: React.FC = () => {
   const [showActionModal, setShowActionModal] = useState(false);
   const [trackToAction, setTrackToAction] = useState<Track | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [radioStations, setRadioStations] = useState<RadioStation[]>([]);
-  const [isLoadingRadio, setIsLoadingRadio] = useState(false);
-  const [showAllRadio, setShowAllRadio] = useState(false);
   const [showAllGenres, setShowAllGenres] = useState(false);
+
+  // Scroll restoration
+  useEffect(() => {
+    const savedScroll = sessionStorage.getItem('homeScroll');
+    if (savedScroll) {
+      window.scrollTo(0, parseInt(savedScroll));
+    }
+
+    const handleScroll = () => {
+      sessionStorage.setItem('homeScroll', window.scrollY.toString());
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
   const { playlists, addToPlaylist } = usePlayer();
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [trackToDownload, setTrackToDownload] = useState<Track | null>(null);
@@ -160,21 +172,7 @@ const HomeView: React.FC = () => {
     }
   };
 
-  // Load radio stations on mount
-  useEffect(() => {
-    const loadRadio = async () => {
-      setIsLoadingRadio(true);
-      try {
-        const stations = await getRadioStations();
-        setRadioStations(stations);
-      } catch (err) {
-        console.error('Failed to load radio stations:', err);
-      } finally {
-        setIsLoadingRadio(false);
-      }
-    };
-    loadRadio();
-  }, []);
+
 
   const handleRadioPlay = (station: RadioStation) => {
     hapticFeedback.light();

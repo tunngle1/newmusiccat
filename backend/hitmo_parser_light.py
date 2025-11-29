@@ -358,6 +358,62 @@ class HitmoParser:
                 'image': 'https://cdn-radiotime-logos.tunein.com/s24939q.png'
             },
             {
+                'id': 'likefm',
+                'name': 'Like FM',
+                'genre': 'Хиты',
+                'url': 'https://pub0302.101.ru:8443/stream/air/aac/64/202',
+                'image': 'https://cdn-radiotime-logos.tunein.com/s259461q.png'
+            },
+            {
+                'id': 'comedy',
+                'name': 'Comedy Radio',
+                'genre': 'Юмор',
+                'url': 'https://pub0302.101.ru:8443/stream/air/aac/64/202',
+                'image': 'https://cdn-radiotime-logos.tunein.com/s185072q.png'
+            },
+            {
+                'id': 'relaxfm',
+                'name': 'Relax FM',
+                'genre': 'Релакс',
+                'url': 'https://pub0302.101.ru:8443/stream/air/aac/64/200',
+                'image': 'https://cdn-radiotime-logos.tunein.com/s89642q.png'
+            },
+            {
+                'id': 'romantika',
+                'name': 'Радио Romantika',
+                'genre': 'Романтика',
+                'url': 'https://pub0302.101.ru:8443/stream/air/aac/64/204',
+                'image': 'https://cdn-radiotime-logos.tunein.com/s133641q.png'
+            },
+            {
+                'id': 'jazz',
+                'name': 'Радио JAZZ',
+                'genre': 'Джаз',
+                'url': 'https://nashe1.hostingradio.ru/jazz-128.mp3',
+                'image': 'https://cdn-radiotime-logos.tunein.com/s6888q.png'
+            },
+            {
+                'id': 'classic',
+                'name': 'Радио Classic',
+                'genre': 'Классика',
+                'url': 'https://nashe1.hostingradio.ru/classic-128.mp3',
+                'image': 'https://cdn-radiotime-logos.tunein.com/s29505q.png'
+            },
+            {
+                'id': 'montecarlo',
+                'name': 'Monte Carlo',
+                'genre': 'Лаунж',
+                'url': 'https://montecarlo.hostingradio.ru/montecarlo96.aacp',
+                'image': 'https://cdn-radiotime-logos.tunein.com/s6890q.png'
+            },
+            {
+                'id': 'maximum',
+                'name': 'Радио MAXIMUM',
+                'genre': 'Рок',
+                'url': 'https://maximum.hostingradio.ru/maximum96.aacp',
+                'image': 'https://cdn-radiotime-logos.tunein.com/s6886q.png'
+            }
+        ]
                 'id': 'radio7',
                 'name': 'Радио 7',
                 'genre': 'Поп',
