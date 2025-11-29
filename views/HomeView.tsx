@@ -39,6 +39,8 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
   const [showAllGenres, setShowAllGenres] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
 
+  console.log('HomeView Render:', { user, isAdmin: user?.is_admin, subStatus: user?.subscription_status });
+
   // Scroll restoration
   useEffect(() => {
     const savedScroll = sessionStorage.getItem('homeScroll');
