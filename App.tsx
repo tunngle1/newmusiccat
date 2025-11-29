@@ -83,21 +83,21 @@ const AppContent: React.FC = () => {
   }, [isFullPlayerOpen]);
 
   // Handle swipe down from top to close WebApp
-  const handleTopSwipe = () => {
-    const touchStartY = React.useRef<number | null>(null);
+  useEffect(() => {
+    let touchStartY: number | null = null;
 
     const onTouchStart = (e: TouchEvent) => {
       // Only track if touch starts in top 50px
       if (e.touches[0].clientY < 50) {
-        touchStartY.current = e.touches[0].clientY;
+        touchStartY = e.touches[0].clientY;
       }
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      if (touchStartY.current === null) return;
+      if (touchStartY === null) return;
 
       const touchEndY = e.changedTouches[0].clientY;
-      const diffY = touchEndY - touchStartY.current;
+      const diffY = touchEndY - touchStartY;
 
       // If swiped down more than 100px from top
       if (diffY > 100) {
@@ -107,7 +107,7 @@ const AppContent: React.FC = () => {
         }
       }
 
-      touchStartY.current = null;
+      touchStartY = null;
     };
 
     document.addEventListener('touchstart', onTouchStart);
@@ -117,10 +117,6 @@ const AppContent: React.FC = () => {
       document.removeEventListener('touchstart', onTouchStart);
       document.removeEventListener('touchend', onTouchEnd);
     };
-  };
-
-  useEffect(() => {
-    return handleTopSwipe();
   }, []);
 
   const renderView = () => {
