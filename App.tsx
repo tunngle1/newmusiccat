@@ -70,6 +70,18 @@ const AppContent: React.FC = () => {
     requestPersistentStorage();
   }, []);
 
+  // Prevent background scroll when player is open
+  useEffect(() => {
+    if (isFullPlayerOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isFullPlayerOpen]);
+
   const renderView = () => {
     switch (currentView) {
       case ViewState.HOME:
