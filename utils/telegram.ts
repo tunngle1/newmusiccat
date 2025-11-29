@@ -80,6 +80,7 @@ interface TelegramWebApp {
     }, callback?: (buttonId: string) => void) => void;
     showAlert: (message: string, callback?: () => void) => void;
     showConfirm: (message: string, callback?: (confirmed: boolean) => void) => void;
+    openInvoice: (url: string, callback?: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void) => void;
 }
 
 declare global {

@@ -55,8 +55,8 @@ class UserAuth(BaseModel):
     username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    auth_date: int
-    hash: str
+    auth_date: Optional[int] = 0
+    hash: Optional[str] = ""
 
 class UserStats(BaseModel):
     total_users: int
@@ -103,12 +103,28 @@ class UserListResponse(BaseModel):
     users: List[UserListItem]
 
 
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
 # Инициализация FastAPI
 app = FastAPI(
     title="Telegram Music API",
     description="API для поиска и получения музыки через Hitmo парсер",
     version="1.0.0"
 )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    print(f"❌ Validation error: {exc}")
+    try:
+        body = await request.json()
+        print(f"❌ Request body: {body}")
+    except:
+        pass
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()},
+    )
 
 # CORS настройки для Telegram WebApp
 app.add_middleware(

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, SubscriptionPlan } from '../types';
 import { Loader, Check, Star, Zap } from 'lucide-react';
+import { API_BASE_URL } from '../constants';
 
 // Планы подписки
 const PLANS: SubscriptionPlan[] = [
@@ -35,7 +36,7 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
         setIsLoading(true);
         try {
             // 1. Создаем инвойс на бэкенде
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/payment/stars/create`, {
+            const response = await fetch(`${API_BASE_URL}/api/payment/stars/create`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

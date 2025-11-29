@@ -10,8 +10,8 @@ const SubscriptionBadge: React.FC<SubscriptionBadgeProps> = ({ user }) => {
 
     const { reason, days_left } = user.subscription_status;
 
-    // Показываем только для пробного периода (или админам для теста)
-    if (reason !== 'trial' && !user.is_admin) return null;
+    // Показываем только для пробного периода
+    if (reason !== 'trial') return null;
 
     const getDaysWord = (days: number): string => {
         if (days === 1) return 'день';

@@ -290,7 +290,9 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               id: tgUser.id,
               username: tgUser.username,
               first_name: tgUser.first_name,
-              last_name: tgUser.last_name
+              last_name: tgUser.last_name,
+              auth_date: window.Telegram.WebApp.initDataUnsafe.auth_date || 0,
+              hash: window.Telegram.WebApp.initDataUnsafe.hash || ""
             })
           });
           if (response.ok) {
