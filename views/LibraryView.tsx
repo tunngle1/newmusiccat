@@ -75,12 +75,16 @@ const LibraryView: React.FC = () => {
 
         addTrack(newTrack);
         await storage.saveTrack(newTrack, audioBlob, coverBlob);
-        markTrackAsDownloaded(newTrack.id); // Update context state
+        markTrackAsDownloaded(newTrack.id);
 
         setLibraryTracks(prev => [newTrack, ...prev]);
         setYoutubeUrl('');
         setFoundYoutubeTrack(null);
-        alert('Трек сохранен в медиатеку!');
+
+        // Auto-play the new track
+        playTrack(newTrack);
+
+        alert('Трек сохранен и запущен!');
       } else {
         setIsDownloadingChat(true);
         // Download to Chat
