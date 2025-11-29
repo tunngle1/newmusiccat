@@ -49,12 +49,12 @@ const LibraryView: React.FC = () => {
     try {
       if (target === 'app') {
         setIsDownloadingApp(true);
-        // Download to App via Proxy to avoid CORS
+        // Download to App via Server File Download (Reliable)
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        const proxyUrl = `${apiUrl}/api/stream?url=${encodeURIComponent(foundYoutubeTrack.url)}`;
+        const downloadUrl = `${apiUrl}/api/youtube/download_file?url=${encodeURIComponent(youtubeUrl)}`;
 
-        const audioRes = await fetch(proxyUrl);
-        if (!audioRes.ok) throw new Error('Failed to download audio via proxy');
+        const audioRes = await fetch(downloadUrl);
+        if (!audioRes.ok) throw new Error('Failed to download audio file from server');
 
         const audioBlob = await audioRes.blob();
         const objectUrl = URL.createObjectURL(audioBlob);
