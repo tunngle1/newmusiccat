@@ -511,6 +511,58 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  // Media Session API integration
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+      if (currentTrack) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: currentTrack.title,
+          artist: currentTrack.artist,
+          album: 'TG Music Player',
+          artwork: [
+            { src: currentTrack.coverUrl, sizes: '96x96', type: 'image/jpeg' },
+            { src: currentTrack.coverUrl, sizes: '128x128', type: 'image/jpeg' },
+            { src: currentTrack.coverUrl, sizes: '192x192', type: 'image/jpeg' },
+            { src: currentTrack.coverUrl, sizes: '256x256', type: 'image/jpeg' },
+            { src: currentTrack.coverUrl, sizes: '384x384', type: 'image/jpeg' },
+            { src: currentTrack.coverUrl, sizes: '512x512', type: 'image/jpeg' },
+          ]
+        });
+      } else if (currentRadio) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: currentRadio.name,
+          artist: currentRadio.genre,
+          album: 'Radio',
+          artwork: [
+            { src: currentRadio.image, sizes: '96x96', type: 'image/jpeg' },
+            { src: currentRadio.image, sizes: '128x128', type: 'image/jpeg' },
+            { src: currentRadio.image, sizes: '192x192', type: 'image/jpeg' },
+            { src: currentRadio.image, sizes: '256x256', type: 'image/jpeg' },
+            { src: currentRadio.image, sizes: '384x384', type: 'image/jpeg' },
+            { src: currentRadio.image, sizes: '512x512', type: 'image/jpeg' },
+          ]
+        });
+      }
+
+      navigator.mediaSession.setActionHandler('play', () => togglePlay());
+      navigator.mediaSession.setActionHandler('pause', () => togglePlay());
+      navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
+      navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime !== undefined) {
+          seek(details.seekTime);
+        }
+      });
+    }
+  }, [currentTrack, currentRadio]); // Update metadata when track changes
+
+  // Update playback state for Media Session
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    }
+  }, [isPlaying]);
+
   const addTrack = (track: Track) => {
     setAllTracks(prev => [track, ...prev]);
     setQueue(prev => [track, ...prev]);
