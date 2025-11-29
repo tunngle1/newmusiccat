@@ -658,6 +658,8 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  const [downloadQueue, setDownloadQueue] = useState<Track[]>([]);
+
   const toggleRepeat = () => {
     setRepeatMode(prev => {
       if (prev === 'none') return 'all';
@@ -668,9 +670,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const toggleShuffle = () => setIsShuffle(!isShuffle);
 
-  const downloadTrack = async (track: Track) => {
-    if (downloadedTracks.has(track.id) || isDownloading) return;
-
+  const processDownload = async (track: Track) => {
     try {
       setIsDownloading(track.id);
       console.log("Downloading track:", track.title);
@@ -711,6 +711,26 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } finally {
       setIsDownloading(null);
     }
+  };
+
+  // Queue processor
+  useEffect(() => {
+    if (!isDownloading && downloadQueue.length > 0) {
+      const nextTrack = downloadQueue[0];
+      setDownloadQueue(prev => prev.slice(1));
+      processDownload(nextTrack);
+    }
+  }, [isDownloading, downloadQueue]);
+
+  const downloadTrack = async (track: Track) => {
+    // Check if already downloaded
+    if (downloadedTracks.has(track.id)) return;
+
+    // Check if already in queue
+    setDownloadQueue(prev => {
+      if (prev.some(t => t.id === track.id)) return prev;
+      return [...prev, track];
+    });
   };
 
   const removeDownloadedTrack = async (trackId: string) => {
