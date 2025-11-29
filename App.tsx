@@ -82,6 +82,47 @@ const AppContent: React.FC = () => {
     };
   }, [isFullPlayerOpen]);
 
+  // Handle swipe down from top to close WebApp
+  const handleTopSwipe = () => {
+    const touchStartY = React.useRef<number | null>(null);
+
+    const onTouchStart = (e: TouchEvent) => {
+      // Only track if touch starts in top 50px
+      if (e.touches[0].clientY < 50) {
+        touchStartY.current = e.touches[0].clientY;
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (touchStartY.current === null) return;
+
+      const touchEndY = e.changedTouches[0].clientY;
+      const diffY = touchEndY - touchStartY.current;
+
+      // If swiped down more than 100px from top
+      if (diffY > 100) {
+        // Close WebApp
+        if (window.Telegram?.WebApp) {
+          window.Telegram.WebApp.close();
+        }
+      }
+
+      touchStartY.current = null;
+    };
+
+    document.addEventListener('touchstart', onTouchStart);
+    document.addEventListener('touchend', onTouchEnd);
+
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchend', onTouchEnd);
+    };
+  };
+
+  useEffect(() => {
+    return handleTopSwipe();
+  }, []);
+
   const renderView = () => {
     switch (currentView) {
       case ViewState.HOME:

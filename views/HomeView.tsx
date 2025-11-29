@@ -562,7 +562,7 @@ const HomeView: React.FC = () => {
       {/* Action Modal (Add to Playlist) */}
       {
         showActionModal && trackToAction && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowActionModal(false)}>
+          <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowActionModal(false)}>
             <div className="bg-gray-900 w-full max-w-sm p-6 rounded-t-2xl sm:rounded-2xl border-t sm:border border-white/10 shadow-2xl transform transition-transform" onClick={e => e.stopPropagation()}>
               <h3 className="text-lg font-bold mb-4 text-white">Добавить в плейлист</h3>
 

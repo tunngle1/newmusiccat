@@ -120,6 +120,9 @@ export const initTelegramWebApp = (): TelegramWebApp | null => {
         // Разворачиваем приложение на весь экран
         webApp.expand();
 
+        // Отключаем вертикальные свайпы (свайп вниз для закрытия)
+        disableVerticalSwipes();
+
         // Устанавливаем цвета темы
         if (webApp.colorScheme === 'dark') {
             document.documentElement.classList.add('dark');
@@ -135,6 +138,28 @@ export const initTelegramWebApp = (): TelegramWebApp | null => {
     }
 
     return webApp;
+};
+
+/**
+ * Отключить вертикальные свайпы в Telegram (свайп вниз для закрытия)
+ */
+export const disableVerticalSwipes = () => {
+    const webApp = getTelegramWebApp();
+    if (webApp && (webApp as any).disableVerticalSwipes) {
+        (webApp as any).disableVerticalSwipes();
+        console.log('Vertical swipes disabled');
+    }
+};
+
+/**
+ * Включить вертикальные свайпы в Telegram
+ */
+export const enableVerticalSwipes = () => {
+    const webApp = getTelegramWebApp();
+    if (webApp && (webApp as any).enableVerticalSwipes) {
+        (webApp as any).enableVerticalSwipes();
+        console.log('Vertical swipes enabled');
+    }
 };
 
 /**
