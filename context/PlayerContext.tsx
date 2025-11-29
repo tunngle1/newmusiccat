@@ -208,17 +208,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
-  // Pre-fetch effect
-  useEffect(() => {
-    if (!currentTrack || queue.length === 0) return;
-    const currentIndex = queue.findIndex(t => t.id === currentTrack.id);
-    const tracksRemaining = queue.length - 1 - currentIndex;
 
-    // Load more if we are within 3 tracks of the end
-    if (tracksRemaining < 3) {
-      loadMoreTracks();
-    }
-  }, [currentTrack, queue]);
 
   const nextTrack = async () => {
     const currentTrackVal = currentTrackRef.current;
@@ -449,21 +439,34 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const previousTrackIdRef = useRef<string | null>(null);
 
+  const blobUrlCache = useRef<Map<string, string>>(new Map());
+
+  // ... (existing code)
+
   useEffect(() => {
     const playAudio = async () => {
       if (currentTrack && audioRef.current) {
         try {
           let src = currentTrack.audioUrl;
+          let isLocal = false;
 
-          // Проверяем, скачан ли трек
-          if (isCurrentTrackDownloaded) {
+          // 1. Check Cache first (Synchronous)
+          if (blobUrlCache.current.has(currentTrack.id)) {
+            src = blobUrlCache.current.get(currentTrack.id)!;
+            isLocal = true;
+            console.log("Playing from blob cache:", currentTrack.title);
+          }
+          // 2. Fallback to Async DB load if downloaded but not cached
+          else if (isCurrentTrackDownloaded) {
             try {
               const savedTrack = await storage.getTrack(currentTrack.id);
               if (savedTrack && savedTrack.audioBlob) {
-                src = URL.createObjectURL(savedTrack.audioBlob);
-                console.log("Playing from local storage:", currentTrack.title);
+                const blobUrl = URL.createObjectURL(savedTrack.audioBlob);
+                blobUrlCache.current.set(currentTrack.id, blobUrl); // Cache it
+                src = blobUrl;
+                isLocal = true;
+                console.log("Playing from local storage (async):", currentTrack.title);
 
-                // Если есть сохраненная обложка, обновляем её в текущем треке для отображения
                 if (savedTrack.coverBlob) {
                   const coverUrl = URL.createObjectURL(savedTrack.coverBlob);
                   currentTrack.coverUrl = coverUrl;
@@ -471,34 +474,27 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               }
             } catch (e) {
               console.error("Error loading local track:", e);
-              // Fallback to network URL if local load fails
               src = currentTrack.audioUrl;
             }
           }
 
           if (audioRef.current.src !== src) {
-            // Save current playback position and playing state
             const wasPlaying = isPlaying;
             const savedTime = audioRef.current.currentTime || 0;
-
-            // Check if we are switching sources for the SAME track
             const isSameTrack = previousTrackIdRef.current === currentTrack.id;
 
-            // Reset time ONLY if it's a new track
             if (!isSameTrack) {
               setDuration(0);
               setCurrentTime(0);
             }
 
-            // Освобождаем старый URL если это был blob
-            if (audioRef.current.src.startsWith('blob:')) {
-              URL.revokeObjectURL(audioRef.current.src);
-            }
+            // Revoke old blob if it's not in cache (or manage cache cleanup separately)
+            // For now, we rely on cache cleanup logic or browser GC for simple blobs
+            // But we should be careful not to revoke what's in cache
 
             audioRef.current.src = src;
-            audioRef.current.load(); // Явно загружаем новый источник
+            audioRef.current.load();
 
-            // Restore playback position ONLY if it's the same track (switching source)
             if (isSameTrack && savedTime > 0) {
               audioRef.current.currentTime = savedTime;
             } else {
@@ -510,13 +506,11 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               if (playPromise !== undefined) {
                 playPromise.catch(e => {
                   console.error("Play error (auto-play):", e);
-                  // Если ошибка NotSupportedError, возможно blob битый или формат не тот
                 });
               }
             }
           }
 
-          // Update previous track ID
           previousTrackIdRef.current = currentTrack.id;
 
         } catch (e) {
@@ -527,6 +521,51 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     playAudio();
   }, [currentTrack, isCurrentTrackDownloaded]);
+
+  // ... (existing code)
+
+  // Pre-fetch effect (Network + Blobs)
+  useEffect(() => {
+    if (!currentTrack || queue.length === 0) return;
+    const currentIndex = queue.findIndex(t => t.id === currentTrack.id);
+
+    // 1. Pre-load Blobs for next 3 tracks
+    const preloadBlobs = async () => {
+      for (let i = 1; i <= 3; i++) {
+        const nextTrack = queue[currentIndex + i];
+        if (nextTrack && downloadedTracks.has(nextTrack.id) && !blobUrlCache.current.has(nextTrack.id)) {
+          try {
+            const saved = await storage.getTrack(nextTrack.id);
+            if (saved?.audioBlob) {
+              const url = URL.createObjectURL(saved.audioBlob);
+              blobUrlCache.current.set(nextTrack.id, url);
+              console.log("Pre-loaded blob for:", nextTrack.title);
+            }
+          } catch (e) {
+            console.warn("Failed to pre-load blob:", e);
+          }
+        }
+      }
+    };
+    preloadBlobs();
+
+    // 2. Load more tracks from API if needed
+    const tracksRemaining = queue.length - 1 - currentIndex;
+    if (tracksRemaining < 3) {
+      loadMoreTracks();
+    }
+
+    // 3. Cleanup old cache entries (optional, keep last 5?)
+    // Simple cleanup: remove tracks far behind
+    if (currentIndex > 5) {
+      const trackToRemove = queue[currentIndex - 5];
+      if (blobUrlCache.current.has(trackToRemove.id)) {
+        URL.revokeObjectURL(blobUrlCache.current.get(trackToRemove.id)!);
+        blobUrlCache.current.delete(trackToRemove.id);
+      }
+    }
+
+  }, [currentTrack, queue, downloadedTracks]);
 
   // Управление play/pause
   useEffect(() => {
