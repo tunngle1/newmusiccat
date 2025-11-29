@@ -15,6 +15,14 @@ const SubscriptionBadge: React.FC<SubscriptionBadgeProps> = ({ user }) => {
 
     const getBadgeConfig = () => {
         switch (reason) {
+            case 'premium_pro':
+                return {
+                    text: '👑 Premium Pro',
+                    bgColor: 'from-purple-500/20 to-pink-500/20',
+                    borderColor: 'border-purple-500/30',
+                    textColor: 'text-purple-300',
+                    glow: 'shadow-purple-500/20'
+                };
             case 'premium':
                 return {
                     text: '💎 Premium',

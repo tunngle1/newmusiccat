@@ -21,6 +21,7 @@ class User(Base):
     last_name = Column(String, nullable=True)
     is_admin = Column(Boolean, default=False)
     is_premium = Column(Boolean, default=False)
+    is_premium_pro = Column(Boolean, default=False)  # Эксклюзивный уровень
     is_blocked = Column(Boolean, default=False)  # New field for access control
     joined_at = Column(DateTime, default=datetime.utcnow)
     
@@ -30,6 +31,10 @@ class User(Base):
     
     # Premium subscription field (for future use)
     premium_expires_at = Column(DateTime, nullable=True)
+    
+    # Track deletion scheduling
+    subscription_expired_at = Column(DateTime, nullable=True)  # Когда истекла подписка
+    tracks_deletion_scheduled_at = Column(DateTime, nullable=True)  # Когда удалить треки
 
 class DownloadedMessage(Base):
     __tablename__ = "downloaded_messages"

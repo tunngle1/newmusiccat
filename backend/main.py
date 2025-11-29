@@ -64,6 +64,7 @@ class GrantRequest(BaseModel):
     user_id: int
     is_admin: Optional[bool] = None
     is_premium: Optional[bool] = None
+    is_premium_pro: Optional[bool] = None  # Эксклюзивный уровень
     is_blocked: Optional[bool] = None
     trial_days: Optional[int] = None  # Количество дней пробного периода
     premium_days: Optional[int] = None  # Количество дней премиум подписки
@@ -164,6 +165,9 @@ def has_access(user: User) -> tuple[bool, str, dict]:
     
     if user.is_admin:
         return True, "admin", {}
+    
+    if user.is_premium_pro:
+        return True, "premium_pro", {}
     
     if user.is_premium:
         return True, "premium", {}
@@ -356,10 +360,13 @@ async def grant_rights(
         target_user.is_blocked = request.is_blocked
     
     # Check if premium is being revoked
-    was_premium = target_user.is_premium
+    was_premium = target_user.is_premium or target_user.is_premium_pro
     
     if request.is_premium is not None:
         target_user.is_premium = request.is_premium
+    
+    if request.is_premium_pro is not None:
+        target_user.is_premium_pro = request.is_premium_pro
     
     # Управление пробным периодом
     if request.trial_days is not None:
@@ -753,6 +760,14 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
         raise HTTPException(status_code=500, detail="Bot token not configured")
     
     try:
+        # Проверить статус подписки пользователя
+        user = db.query(User).filter(User.id == request.user_id).first()
+        
+        # Premium Pro может пересылать треки, обычные пользователи - нет
+        protect_content = True
+        if user and user.is_premium_pro:
+            protect_content = False
+        
         # 1. Download audio file from URL
         async with httpx.AsyncClient(timeout=30.0) as client:
             audio_response = await client.get(request.track.url)
@@ -771,7 +786,7 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
             'title': request.track.title,
             'performer': request.track.artist,
             'duration': request.track.duration,
-            'protect_content': True  # Disable forwarding
+            'protect_content': protect_content  # Premium Pro может пересылать
         }
         
         async with httpx.AsyncClient(timeout=30.0) as client:

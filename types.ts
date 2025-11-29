@@ -30,9 +30,10 @@ export interface User {
   last_name?: string;
   is_admin: boolean;
   is_premium: boolean;
+  is_premium_pro: boolean;
   subscription_status?: {
     has_access: boolean;
-    reason: 'admin' | 'premium' | 'trial' | 'expired' | 'blocked';
+    reason: 'admin' | 'premium' | 'premium_pro' | 'trial' | 'expired' | 'blocked';
     trial_expires_at?: string;
     premium_expires_at?: string;
     days_left?: number;
