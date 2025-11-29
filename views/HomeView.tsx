@@ -1,14 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { Play, MoreVertical, Search, Loader, Heart } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Search, Play, Pause, SkipForward, SkipBack, Heart, Download, Check, RefreshCw, Loader, Settings, MoreVertical } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
-import { Track } from '../types';
+import { Track, ViewState } from '../types';
 import { searchTracks, getGenreTracks, downloadToChat } from '../utils/api';
 import { hapticFeedback, getTelegramUser } from '../utils/telegram';
 import { deduplicateTracks } from '../utils/deduplication';
 import SubscriptionBadge from '../components/SubscriptionBadge';
 import PaymentView from '../views/PaymentView';
 
-const HomeView: React.FC = () => {
+interface HomeViewProps {
+  onNavigate: (view: ViewState) => void;
+}
+
+const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
   const {
     playTrack,
     playRadio,
@@ -198,17 +202,24 @@ const HomeView: React.FC = () => {
             </span>
           )}
         </div>
-        <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs">
-          TG
-        </div>
+        <div className="flex items-center gap-2">
+          {user?.is_admin && (
+            <button
+              onClick={() => onNavigate(ViewState.ADMIN)}
+              className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+            >
+              <Settings size={16} />
+            </button>
+          )}
 
-        <button
-          onClick={() => setShowPayment(true)}
-          className="px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs font-bold shadow-lg hover:scale-105 transition-transform flex items-center gap-1"
-        >
-          <span className="text-yellow-300">★</span>
-          Premium
-        </button>
+          <button
+            onClick={() => setShowPayment(true)}
+            className="px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs font-bold shadow-lg hover:scale-105 transition-transform flex items-center gap-1"
+          >
+            <span className="text-yellow-300">★</span>
+            Premium
+          </button>
+        </div>
       </div>
 
       {showPayment && (

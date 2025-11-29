@@ -132,7 +132,7 @@ const AppContent: React.FC = () => {
   const renderView = () => {
     switch (currentView) {
       case ViewState.HOME:
-        return <HomeView />;
+        return <HomeView onNavigate={handleNavigate} />;
       case ViewState.PLAYLISTS:
         return <PlaylistsView />;
       case ViewState.FAVORITES:
