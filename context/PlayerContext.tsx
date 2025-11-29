@@ -842,6 +842,10 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  const markTrackAsDownloaded = (trackId: string) => {
+    setDownloadedTracks(prev => new Set(prev).add(trackId));
+  };
+
   return (
     <PlayerContext.Provider value={{
       allTracks,
