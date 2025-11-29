@@ -303,6 +303,8 @@ async def get_subscription_status(user_id: int = Query(...), db: Session = Depen
 @app.get("/api/admin/stats", response_model=UserStats)
 async def get_stats(user_id: int = Query(...), db: Session = Depends(get_db)):
     """Получение статистики (только для админов)"""
+    from backend.database import Payment
+    
     user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.is_admin:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -314,11 +316,18 @@ async def get_stats(user_id: int = Query(...), db: Session = Depends(get_db)):
     today = datetime.utcnow().date()
     new_today = db.query(User).filter(User.joined_at >= today).count()
     
+    # Считаем выручку
+    payments = db.query(Payment).filter(Payment.status == 'completed').all()
+    ton_revenue = sum(float(p.amount) for p in payments if p.currency == 'TON')
+    stars_revenue = sum(int(p.amount) for p in payments if p.currency == 'XTR')
+    
     return UserStats(
         total_users=total,
         premium_users=premium,
         admin_users=admins,
-        new_users_today=new_today
+        new_users_today=new_today,
+        total_revenue_ton=ton_revenue,
+        total_revenue_stars=stars_revenue
     )
 
 @app.get("/api/admin/users", response_model=UserListResponse)
@@ -537,10 +546,14 @@ async def create_stars_invoice_endpoint(request: CreateInvoiceRequest):
 async def verify_ton_payment(request: TonVerificationRequest, db: Session = Depends(get_db)):
     """Проверка оплаты TON"""
     try:
+        # Определяем сумму по плану
+        from backend.payments import TON_PRICE_MONTH, TON_PRICE_YEAR
+        amount = TON_PRICE_MONTH if request.plan == 'month' else TON_PRICE_YEAR
+        
         is_valid = await verify_ton_transaction(request.boc, request.user_id, request.plan)
         
         if is_valid:
-            grant_premium_after_payment(db, request.user_id, request.plan, "ton")
+            grant_premium_after_payment(db, request.user_id, request.plan, "ton", amount)
             return {"status": "ok", "message": "Payment verified and premium granted"}
         else:
             raise HTTPException(status_code=400, detail="Invalid transaction")
@@ -571,12 +584,13 @@ async def telegram_webhook(update: Dict[str, Any] = Body(...), db: Session = Dep
             payment = update["message"]["successful_payment"]
             user_id = update["message"]["from"]["id"]
             payload = payment["invoice_payload"] # stars_month_12345_timestamp
+            amount = payment["total_amount"] # В звездах
             
             # Парсим payload
             parts = payload.split("_")
             if len(parts) >= 2:
                 plan = parts[1] # month или year
-                grant_premium_after_payment(db, user_id, plan, "stars")
+                grant_premium_after_payment(db, user_id, plan, "stars", amount)
                 print(f"✅ Premium granted to user {user_id} via Stars ({plan})")
                 
             return {"status": "ok"}
@@ -922,7 +936,7 @@ class DownloadToChatRequest(BaseModel):
 @app.post("/api/download/chat")
 async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends(get_db)):
     """
-    Download track to user's Telegram chat via bot
+    Download track to users Telegram chat via bot
     """
     if not BOT_TOKEN:
         raise HTTPException(status_code=500, detail="Bot token not configured")

@@ -57,6 +57,18 @@ class Lyrics(Base):
     source = Column(String, default="genius")  # Source: genius, manual, etc.
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, index=True)
+    amount = Column(String) # Store as string to avoid float precision issues with crypto
+    currency = Column(String) # 'TON', 'XTR' (Stars)
+    plan = Column(String) # 'month', 'year'
+    status = Column(String) # 'completed', 'failed'
+    transaction_hash = Column(String, nullable=True) # For TON
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 
 
 def init_db():

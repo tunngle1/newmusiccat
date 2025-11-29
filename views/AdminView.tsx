@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Users, Star, Activity, Check, AlertCircle, ArrowLeft, Database, RefreshCw, Trash2, Crown, UserX, Ban, CheckCircle } from 'lucide-react';
+import { Shield, Users, Star, Activity, Check, AlertCircle, ArrowLeft, Database, RefreshCw, Trash2, Crown, UserX, Ban, CheckCircle, Zap } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { API_BASE_URL } from '../constants';
 
@@ -10,6 +10,8 @@ interface UserStats {
     premium_users: number;
     admin_users: number;
     new_users_today: number;
+    total_revenue_ton: number;
+    total_revenue_stars: number;
 }
 
 interface CacheStats {
@@ -360,6 +362,26 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                             </div>
                             <div className="text-3xl font-bold text-white text-glow">
                                 {isLoading ? '...' : stats?.new_users_today}
+                            </div>
+                        </div>
+
+                        <div className="glass-panel p-5 rounded-2xl">
+                            <div className="flex items-center gap-2 text-blue-400 mb-2">
+                                <Zap size={16} />
+                                <span className="text-xs font-bold uppercase tracking-wider">TON Revenue</span>
+                            </div>
+                            <div className="text-3xl font-bold text-white text-glow">
+                                {isLoading ? '...' : stats?.total_revenue_ton.toFixed(2)}
+                            </div>
+                        </div>
+
+                        <div className="glass-panel p-5 rounded-2xl">
+                            <div className="flex items-center gap-2 text-yellow-400 mb-2">
+                                <Star size={16} />
+                                <span className="text-xs font-bold uppercase tracking-wider">Stars Revenue</span>
+                            </div>
+                            <div className="text-3xl font-bold text-white text-glow">
+                                {isLoading ? '...' : stats?.total_revenue_stars}
                             </div>
                         </div>
                     </div>

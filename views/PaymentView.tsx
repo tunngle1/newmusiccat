@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User, SubscriptionPlan } from '../types';
 import { Loader, Check, Star, Zap } from 'lucide-react';
 import { API_BASE_URL } from '../constants';
+import { useTonConnectUI, TonConnectButton } from '@tonconnect/ui-react';
 
 // Планы подписки
 const PLANS: SubscriptionPlan[] = [
@@ -31,6 +32,7 @@ interface PaymentViewProps {
 const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
     const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>(PLANS[0]);
     const [isLoading, setIsLoading] = useState(false);
+    const [tonConnectUI] = useTonConnectUI();
 
     const handleStarsPayment = async () => {
         setIsLoading(true);
@@ -70,8 +72,65 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
         }
     };
 
-    const handleTonPayment = () => {
-        window.Telegram.WebApp.showAlert('Оплата через TON скоро будет доступна! Пожалуйста, используйте Stars.');
+    const handleTonPayment = async () => {
+        if (!tonConnectUI.connected) {
+            window.Telegram.WebApp.showAlert('Пожалуйста, подключите кошелек TON');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            // Сумма в нано-тонах (1 TON = 1,000,000,000 nanotons)
+            const amountNano = (selectedPlan.priceTon * 1000000000).toString();
+
+            // Адрес получателя (магазина) - должен быть в .env на бэкенде, но здесь нужен для формирования транзакции
+            // В реальном приложении лучше получать параметры транзакции с бэкенда
+            // Для теста используем адрес из бэкенда (нужно сделать endpoint для получения конфига)
+            // Пока хардкод для теста (замените на свой тестовый кошелек!)
+            const destinationAddress = "0QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC"; // ЗАГЛУШКА!
+
+            const transaction = {
+                validUntil: Math.floor(Date.now() / 1000) + 600, // 10 минут
+                messages: [
+                    {
+                        address: destinationAddress,
+                        amount: amountNano,
+                        // payload: ... (можно добавить комментарий с ID пользователя)
+                    }
+                ]
+            };
+
+            const result = await tonConnectUI.sendTransaction(transaction);
+
+            // Отправляем BOC на бэкенд для проверки
+            const response = await fetch(`${API_BASE_URL}/api/payment/ton/verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: user?.id,
+                    plan: selectedPlan.id,
+                    boc: result.boc
+                })
+            });
+
+            const data = await response.json();
+            if (data.status === 'ok') {
+                window.Telegram.WebApp.showAlert('Оплата TON успешна! Премиум активирован.');
+                onClose();
+            } else {
+                window.Telegram.WebApp.showAlert('Ошибка проверки транзакции.');
+            }
+
+        } catch (error) {
+            console.error('TON Payment error:', error);
+            if (error instanceof Error && error.message.includes('User rejected')) {
+                // User cancelled
+            } else {
+                window.Telegram.WebApp.showAlert('Ошибка при оплате TON: ' + (error as Error).message);
+            }
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -107,7 +166,7 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
                             <div className="text-sm text-gray-400">{plan.duration}</div>
                             <div className="text-xl font-bold text-white mt-1">{plan.name}</div>
                             <div className="text-blue-400 font-medium mt-2">
-                                {plan.priceStars} ⭐
+                                {plan.priceStars} ⭐ / {plan.priceTon} TON
                             </div>
                         </button>
                     ))}
@@ -140,13 +199,35 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
                         )}
                     </button>
 
-                    <button
-                        onClick={handleTonPayment}
-                        className="w-full py-4 bg-[#0098EA] hover:bg-[#0088D0] text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
-                    >
-                        <Zap size={20} />
-                        Оплатить {selectedPlan.priceTon} TON
-                    </button>
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                            <div className="w-full border-t border-gray-700"></div>
+                        </div>
+                        <div className="relative flex justify-center">
+                            <span className="px-2 bg-[#1c1c1e] text-sm text-gray-500">или через TON</span>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                        <div className="flex justify-center w-full">
+                            <TonConnectButton />
+                        </div>
+
+                        <button
+                            onClick={handleTonPayment}
+                            disabled={isLoading || !tonConnectUI.connected}
+                            className={`
+                                w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors
+                                ${!tonConnectUI.connected
+                                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                                    : 'bg-[#0098EA] hover:bg-[#0088D0] text-white'}
+                            `}
+                        >
+                            <Zap size={20} />
+                            Оплатить {selectedPlan.priceTon} TON
+                        </button>
+                    </div>
+
                 </div>
 
                 <p className="text-center text-xs text-gray-500">
