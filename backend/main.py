@@ -614,6 +614,40 @@ async def telegram_webhook(update: Dict[str, Any] = Body(...), db: Session = Dep
         # Не возвращаем ошибку Telegram, чтобы он не слал повторы бесконечно
         return {"status": "ok"}
 
+# --- Debug Endpoints (для тестирования) ---
+
+@app.post("/api/debug/grant-premium")
+async def debug_grant_premium(
+    user_id: int = Query(...),
+    plan: str = Query(..., description="month или year"),
+    admin_id: int = Query(..., description="ID администратора"),
+    db: Session = Depends(get_db)
+):
+    """
+    Debug endpoint для ручной выдачи премиума после TON перевода.
+    Используется для тестирования, когда платеж был сделан вручную.
+    """
+    # Проверяем, что запрос от админа
+    admin = db.query(User).filter(User.id == admin_id).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Определяем сумму
+    from backend.payments import TON_PRICE_MONTH, TON_PRICE_YEAR
+    amount = TON_PRICE_MONTH if plan == 'month' else TON_PRICE_YEAR
+    
+    # Выдаем премиум
+    success = grant_premium_after_payment(db, user_id, plan, "ton_manual", amount)
+    
+    if success:
+        return {
+            "status": "ok",
+            "message": f"Premium granted to user {user_id} for {plan}",
+            "amount": amount
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Failed to grant premium")
+
 # --- Cache Admin Endpoints ---
 
 

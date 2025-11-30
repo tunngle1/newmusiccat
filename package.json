@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@ton/core": "^0.56.3",
-    "@tonconnect/sdk": "^3.0.5",
+    "@tonconnect/sdk": "^2.1.5",
     "@tonconnect/ui-react": "^2.0.9",
     "idb": "^8.0.3",
     "lucide-react": "^0.554.0",
