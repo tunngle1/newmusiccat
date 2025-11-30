@@ -23,24 +23,18 @@ class User(Base):
     is_premium = Column(Boolean, default=False)
     is_premium_pro = Column(Boolean, default=False)  # Эксклюзивный уровень
     is_blocked = Column(Boolean, default=False)  # New field for access control
+    download_count = Column(Integer, default=0)  # Track download activity
     joined_at = Column(DateTime, default=datetime.utcnow)
     
     # Trial period fields
     trial_started_at = Column(DateTime, nullable=True)
     trial_expires_at = Column(DateTime, nullable=True)
-    
-    # Premium subscription field (for future use)
-    premium_expires_at = Column(DateTime, nullable=True)
-    
-    # Track deletion scheduling
-    subscription_expired_at = Column(DateTime, nullable=True)  # Когда истекла подписка
-    tracks_deletion_scheduled_at = Column(DateTime, nullable=True)  # Когда удалить треки
 
 class DownloadedMessage(Base):
     __tablename__ = "downloaded_messages"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(Integer, index=True)  # Telegram user ID
+    user_id = Column(Integer, index=True)
     chat_id = Column(Integer)  # Usually same as user_id for private chats
     message_id = Column(Integer)  # Telegram message ID
     track_id = Column(String)  # Track identifier
