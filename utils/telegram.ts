@@ -81,6 +81,8 @@ interface TelegramWebApp {
     showAlert: (message: string, callback?: () => void) => void;
     showConfirm: (message: string, callback?: (confirmed: boolean) => void) => void;
     openInvoice: (url: string, callback?: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void) => void;
+    onEvent: (eventType: string, callback: () => void) => void;
+    offEvent: (eventType: string, callback: () => void) => void;
 }
 
 declare global {
@@ -138,6 +140,30 @@ export const initViewport = () => {
         }
     };
 
+    const onFocus = (e: FocusEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+            document.documentElement.classList.add('keyboard-open');
+        }
+    };
+
+    const onBlur = (e: FocusEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+            setTimeout(() => {
+                if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+                    const webApp = getTelegramWebApp();
+                    const height = webApp?.viewportHeight || window.innerHeight;
+                    const stableHeight = webApp?.viewportStableHeight || height;
+
+                    if (stableHeight - height < 100) {
+                        document.documentElement.classList.remove('keyboard-open');
+                    }
+                }
+            }, 100);
+        }
+    };
+
     // Устанавливаем начальную высоту
     setViewportHeight();
 
@@ -148,12 +174,16 @@ export const initViewport = () => {
 
     // Слушаем обычный resize
     window.addEventListener('resize', setViewportHeight);
+    window.addEventListener('focus', onFocus, true);
+    window.addEventListener('blur', onBlur, true);
 
     return () => {
         if (webApp) {
             webApp.offEvent('viewportChanged', setViewportHeight);
         }
         window.removeEventListener('resize', setViewportHeight);
+        window.removeEventListener('focus', onFocus, true);
+        window.removeEventListener('blur', onBlur, true);
     };
 };
 
