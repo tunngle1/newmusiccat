@@ -151,40 +151,17 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
                 {/* Кнопки оплаты */}
                 <div className="space-y-3 pt-2">
                     <button
-                        onClick={handleStarsPayment}
+                        onClick={handleTributePayment}
                         disabled={isLoading}
-                        className="w-full py-4 bg-[#007AFF] hover:bg-[#0066CC] text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                        className="w-full py-4 bg-[#0098EA] hover:bg-[#0088D0] text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
                     >
-                        {isLoading ? (
-                            <Loader size={20} className="animate-spin" />
-                        ) : (
-                            <>
-                                <Star size={20} fill="currentColor" />
-                                Оплатить {selectedPlan.priceStars} Stars
-                            </>
-                        )}
+                        <CreditCard size={20} />
+                        Оплатить {selectedPlan.priceTon * 100}₽ (Карта / СБП)
                     </button>
 
-                    <div className="relative">
-                        <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                            <div className="w-full border-t border-gray-700"></div>
-                        </div>
-                        <div className="relative flex justify-center">
-                            <span className="px-2 bg-[#1c1c1e] text-sm text-gray-500">или через TON / Карту</span>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                        <button
-                            onClick={handleTributePayment}
-                            disabled={isLoading}
-                            className="w-full py-4 bg-[#0098EA] hover:bg-[#0088D0] text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
-                        >
-                            <CreditCard size={20} />
-                            Оплатить {selectedPlan.priceTon} TON / Карта (Tribute)
-                        </button>
-                    </div>
-
+                    <p className="text-center text-xs text-gray-500 mt-2">
+                        Оплата происходит через сервис Tribute.tg
+                    </p>
                 </div>
 
                 <p className="text-center text-xs text-gray-500">
