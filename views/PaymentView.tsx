@@ -87,17 +87,27 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
             }
             const config = await configResponse.json();
 
-            // Нормализуем адрес: убираем дефисы и подчеркивания, если есть
-            let walletAddress = config.ton_wallet_address;
+            // Используем @ton/core для правильной обработки адреса
+            let walletAddress: string;
+            try {
+                const { Address } = await import('@ton/core');
 
-            // Если адрес содержит дефисы или подчеркивания (URL-safe формат),
-            // конвертируем в стандартный base64
-            if (walletAddress.includes('-') || walletAddress.includes('_')) {
-                walletAddress = walletAddress.replace(/-/g, '+').replace(/_/g, '/');
+                // Парсим адрес из любого формата
+                const addr = Address.parse(config.ton_wallet_address);
+
+                // Конвертируем в user-friendly non-bounceable формат
+                walletAddress = addr.toString({
+                    bounceable: false,
+                    urlSafe: true
+                });
+
+                console.log('Original address:', config.ton_wallet_address);
+                console.log('Parsed address:', walletAddress);
+            } catch (e) {
+                console.error('Address parsing error:', e);
+                // Fallback - используем адрес как есть
+                walletAddress = config.ton_wallet_address;
             }
-
-            console.log('Original address:', config.ton_wallet_address);
-            console.log('Normalized address:', walletAddress);
 
             // Сумма в нано-тонах (1 TON = 1,000,000,000 nanotons)
             const amountNano = (selectedPlan.priceTon * 1000000000).toString();
