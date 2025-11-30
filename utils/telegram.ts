@@ -107,7 +107,6 @@ export const getTelegramWebApp = (): TelegramWebApp | null => {
 export const isTelegramWebApp = (): boolean => {
     return getTelegramWebApp() !== null;
 };
-
 /**
  * Инициализация Viewport (высоты экрана)
  */
@@ -119,12 +118,23 @@ export const initViewport = () => {
         if (webApp) {
             // Используем viewportStableHeight если доступен, иначе viewportHeight
             const height = webApp.viewportStableHeight || webApp.viewportHeight || window.innerHeight;
+            const stableHeight = webApp.viewportStableHeight || height;
+
             document.documentElement.style.setProperty('--tg-viewport-height', `${height}px`);
-            document.documentElement.style.setProperty('--tg-viewport-stable-height', `${webApp.viewportStableHeight || height}px`);
+            document.documentElement.style.setProperty('--tg-viewport-stable-height', `${stableHeight}px`);
+
+            // Detect keyboard
+            // If viewport is significantly smaller than stable height, keyboard is likely open
+            if (stableHeight - height > 100) {
+                document.documentElement.classList.add('keyboard-open');
+            } else {
+                document.documentElement.classList.remove('keyboard-open');
+            }
         } else {
             // Fallback для обычного браузера
             document.documentElement.style.setProperty('--tg-viewport-height', `${window.innerHeight}px`);
             document.documentElement.style.setProperty('--tg-viewport-stable-height', `${window.innerHeight}px`);
+            document.documentElement.classList.remove('keyboard-open');
         }
     };
 

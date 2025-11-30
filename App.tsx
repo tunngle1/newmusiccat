@@ -191,7 +191,7 @@ const AppContent: React.FC = () => {
       </main>
 
       {/* Floating UI Elements */}
-      <div className="fixed bottom-0 w-full max-w-md left-1/2 transform -translate-x-1/2 z-50">
+      <div className="fixed bottom-0 w-full max-w-md left-1/2 transform -translate-x-1/2 z-50 floating-container transition-all duration-300">
         {!isFullPlayerOpen && currentTrack && (
           <MiniPlayer onExpand={() => setIsFullPlayerOpen(true)} />
         )}
