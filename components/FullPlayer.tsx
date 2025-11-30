@@ -244,7 +244,7 @@ const FullPlayer: React.FC<FullPlayerProps> = ({ onCollapse }) => {
         {/* Cover Art */}
         <div className="flex-1 flex items-center justify-center w-full px-8 py-4 min-h-0">
           <div
-            className="relative max-h-full max-w-full aspect-square rounded-[2rem] overflow-hidden shadow-2xl ring-1 ring-white/10 active:scale-95 transition-transform duration-200"
+            className="relative w-full max-w-[320px] aspect-square rounded-[2rem] overflow-hidden shadow-2xl ring-1 ring-white/10 active:scale-95 transition-transform duration-200"
             onClick={handleDoubleTap}
           >
             <img

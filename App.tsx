@@ -198,16 +198,6 @@ const AppContent: React.FC = () => {
         <BottomNav currentView={currentView} onNavigate={handleNavigate} />
       </div>
 
-      {/* Admin Button (Only for Admins) */}
-      {user?.is_admin && currentView !== ViewState.ADMIN && (
-        <button
-          onClick={() => setCurrentView(ViewState.ADMIN)}
-          className="fixed top-4 right-4 z-40 p-2 glass-button text-blue-400 rounded-full hover:text-blue-300"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-        </button>
-      )}
-
       {/* Full Screen Player Modal */}
       {isFullPlayerOpen && (
         <FullPlayer onCollapse={() => setIsFullPlayerOpen(false)} />

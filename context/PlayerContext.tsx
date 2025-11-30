@@ -189,7 +189,11 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
   useEffect(() => { isShuffleRef.current = isShuffle; }, [isShuffle]);
+  useEffect(() => { isShuffleRef.current = isShuffle; }, [isShuffle]);
   useEffect(() => { searchStateRef.current = searchState; }, [searchState]);
+
+  const downloadedTracksRef = useRef(downloadedTracks);
+  useEffect(() => { downloadedTracksRef.current = downloadedTracks; }, [downloadedTracks]);
 
   // ... (Auth and Load Data omitted)
 
@@ -209,7 +213,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       if (currentSearchState.genreId) {
         newTracks = await getGenreTracks(currentSearchState.genreId, 20, nextPage);
       } else {
-        newTracks = await searchTracks(currentSearchState.query, currentSearchState.searchMode, 20, nextPage);
+        newTracks = await searchTracks(currentSearchState.query, 20, nextPage, currentSearchState.searchMode);
       }
 
       if (newTracks.length > 0) {
@@ -409,25 +413,39 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       // Logic from nextTrack, but using refs
       if (!currentTrackVal || currentQueue.length === 0) return;
 
+      let nextTrack: Track | null = null;
+
       if (isShuffleVal) {
         const randomIndex = Math.floor(Math.random() * currentQueue.length);
-        const nextTrack = currentQueue[randomIndex];
-        setCurrentTrack(nextTrack);
-        setCurrentRadio(null);
-        setIsRadioMode(false);
-        setIsPlaying(true);
-        return;
+        nextTrack = currentQueue[randomIndex];
+      } else {
+        const currentIndex = currentQueue.findIndex(t => t.id === currentTrackVal.id);
+        if (currentIndex < currentQueue.length - 1) {
+          nextTrack = currentQueue[currentIndex + 1];
+        } else if (currentRepeatMode === 'all') {
+          nextTrack = currentQueue[0];
+        }
       }
 
-      const currentIndex = currentQueue.findIndex(t => t.id === currentTrackVal.id);
-      if (currentIndex < currentQueue.length - 1) {
-        const nextTrack = currentQueue[currentIndex + 1];
-        setCurrentTrack(nextTrack);
-        setCurrentRadio(null);
-        setIsRadioMode(false);
-        setIsPlaying(true);
-      } else if (currentRepeatMode === 'all') {
-        const nextTrack = currentQueue[0];
+      if (nextTrack) {
+        // OPTIMISTIC PLAYBACK: Start playing immediately to support background audio
+        // This bypasses the React render cycle delay
+        let src = nextTrack.audioUrl;
+
+        // Check cache synchronously
+        if (blobUrlCache.current.has(nextTrack.id)) {
+          src = blobUrlCache.current.get(nextTrack.id)!;
+        }
+        // We can't easily do the async DB check here synchronously, 
+        // so we rely on the URL or cached blob for immediate playback.
+        // The useEffect will catch up and switch to blob if needed (though unlikely to be needed if not in cache)
+
+        console.log("Optimistic background play:", nextTrack.title);
+        audio.src = src;
+        audio.load();
+        audio.play().catch(e => console.error("Background auto-play error:", e));
+
+        // Update State to sync UI
         setCurrentTrack(nextTrack);
         setCurrentRadio(null);
         setIsRadioMode(false);

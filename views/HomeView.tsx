@@ -208,22 +208,22 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
           {user?.is_admin && (
             <button
               onClick={() => onNavigate(ViewState.ADMIN)}
-              className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+              className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
             >
-              <Settings size={14} />
+              <Settings size={20} />
             </button>
           )}
 
           <button
             onClick={() => onNavigate(ViewState.REFERRAL)}
-            className="px-2 py-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-600 text-white text-[10px] font-bold shadow-lg hover:scale-105 transition-transform flex items-center gap-1"
+            className="px-3 py-1.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-600 text-white text-xs font-bold shadow-lg hover:scale-105 transition-transform flex items-center gap-1"
           >
             🎁
           </button>
 
           <button
             onClick={() => setShowPayment(true)}
-            className="px-2 py-1 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white text-[10px] font-bold shadow-lg hover:scale-105 transition-transform flex items-center gap-1"
+            className="px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs font-bold shadow-lg hover:scale-105 transition-transform flex items-center gap-1"
           >
             <span className="text-yellow-300">★</span>
           </button>
