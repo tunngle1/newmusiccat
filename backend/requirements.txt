@@ -10,3 +10,4 @@ sqlalchemy==2.0.23
 lyricsgenius==3.0.1
 
 yt-dlp
+pytoniq>=0.1.38
