@@ -140,9 +140,107 @@ const AppContent: React.FC = () => {
           window.Telegram.WebApp.close();
         }
       }
-      <AppContent />
-      </NotificationProvider >
-    </PlayerProvider >
+
+      touchStartY = null;
+    };
+
+    document.addEventListener('touchstart', onTouchStart);
+    document.addEventListener('touchend', onTouchEnd);
+
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchend', onTouchEnd);
+    };
+  }, []);
+
+  // Detect keyboard open state
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.visualViewport) {
+        const height = window.visualViewport.height;
+        const initialHeight = window.innerHeight;
+        // If height is significantly smaller than initial height (e.g., < 75%), assume keyboard is open
+        if (height < initialHeight * 0.75) {
+          setIsKeyboardOpen(true);
+        } else {
+          setIsKeyboardOpen(false);
+        }
+      }
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleResize);
+    }
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleResize);
+      }
+    };
+  }, []);
+
+  // Если нет доступа, показываем блокировщик
+  if (!hasAccess) {
+    return <SubscriptionBlocker user={user} onRefresh={refreshSubscriptionStatus} />;
+  }
+
+  const renderView = () => {
+    switch (currentView) {
+      case ViewState.HOME:
+        return <HomeView onNavigate={handleNavigate} />;
+      case ViewState.PLAYLISTS:
+        return <PlaylistsView />;
+      case ViewState.FAVORITES:
+        return <FavoritesView />;
+      case ViewState.RADIO:
+        return <RadioView />;
+      case ViewState.LIBRARY:
+        return <LibraryView />;
+      case ViewState.ADMIN:
+        return <AdminView onBack={() => setCurrentView(ViewState.HOME)} />;
+      case ViewState.REFERRAL:
+        return <ReferralView onBack={() => setCurrentView(ViewState.HOME)} />;
+      default:
+        return <HomeView />;
+    }
+  };
+
+  return (
+    <div className="relative min-h-tg-screen bg-black text-white pb-24 overflow-x-hidden">
+      {/* Background Gradient */}
+      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/40 via-black to-black z-0 pointer-events-none" />
+      <div className="fixed inset-0 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-transparent z-0 pointer-events-none" />
+
+      {/* Main Content Area */}
+      <main className="w-full max-w-md mx-auto min-h-tg-screen relative z-10">
+        {renderView()}
+      </main>
+
+      {/* Floating UI Elements */}
+      <div className={`fixed bottom-0 w-full max-w-md left-1/2 transform -translate-x-1/2 z-50 floating-container transition-all duration-300 ${isKeyboardOpen ? 'opacity-0 pointer-events-none translate-y-20' : ''}`}>
+        {!isFullPlayerOpen && currentTrack && (
+          <MiniPlayer onExpand={() => setIsFullPlayerOpen(true)} />
+        )}
+        <BottomNav currentView={currentView} onNavigate={handleNavigate} />
+      </div>
+
+      {/* Full Screen Player Modal */}
+      {isFullPlayerOpen && (
+        <FullPlayer onCollapse={() => setIsFullPlayerOpen(false)} />
+      )}
+    </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <PlayerProvider>
+      <NotificationProvider>
+        <AppContent />
+      </NotificationProvider>
+    </PlayerProvider>
   );
 };
 
