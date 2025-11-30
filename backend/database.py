@@ -29,6 +29,13 @@ class User(Base):
     # Trial period fields
     trial_started_at = Column(DateTime, nullable=True)
     trial_expires_at = Column(DateTime, nullable=True)
+    
+    # Premium expiration (for subscription stacking)
+    premium_expires_at = Column(DateTime, nullable=True)
+    
+    # Referral system
+    referral_code = Column(String, unique=True, index=True, nullable=True)
+    referred_by = Column(Integer, nullable=True)  # ID of referrer
 
 class DownloadedMessage(Base):
     __tablename__ = "downloaded_messages"
@@ -63,19 +70,16 @@ class Payment(Base):
     transaction_hash = Column(String, nullable=True) # For TON
     created_at = Column(DateTime, default=datetime.utcnow)
 
-class PromoCode(Base):
-    __tablename__ = "promocodes"
+class Referral(Base):
+    __tablename__ = "referrals"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    code = Column(String, unique=True, index=True)
-    discount_type = Column(String) # 'percent', 'fixed', 'trial'
-    value = Column(Integer) # Discount value or trial days
-    tribute_link_month = Column(String, nullable=True) # Link to discounted monthly product
-    tribute_link_year = Column(String, nullable=True) # Link to discounted yearly product
-    max_uses = Column(Integer, default=0) # 0 = unlimited
-    used_count = Column(Integer, default=0)
-    expires_at = Column(DateTime, nullable=True)
+    referrer_id = Column(Integer, index=True)  # Who invited
+    referred_id = Column(Integer, index=True)  # Who was invited
+    status = Column(String, default='pending')  # pending, completed
+    reward_given = Column(Boolean, default=False)  # Has referrer received reward
     created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)  # When referral made first purchase
 
 
 
