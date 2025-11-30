@@ -1823,6 +1823,22 @@ async def complete_payment(
     # Extend premium
     expires_at = extend_premium(user, days, db)
     
+    # Send premium activation notification
+    if BOT_TOKEN:
+        try:
+            import httpx
+            telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            async with httpx.AsyncClient() as client:
+                await client.post(telegram_url, json={
+                    'chat_id': user_id,
+                    'text': f"✨ <b>Premium активирован!</b>\n\n"
+                            f"Ваша подписка активна до {expires_at.strftime('%d.%m.%Y')}\n"
+                            f"Осталось дней: {(expires_at - datetime.utcnow()).days}",
+                    'parse_mode': 'HTML'
+                })
+        except Exception as e:
+            print(f"Failed to send premium activation notification: {e}")
+    
     # Check if this user was referred and reward referrer
     if user.referred_by:
         referral = db.query(Referral).filter(
@@ -1849,10 +1865,17 @@ async def complete_payment(
                     try:
                         import httpx
                         telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+                        
+                        # Get referred user name
+                        referred_name = user.first_name or user.username or f"User {user.id}"
+                        
                         async with httpx.AsyncClient() as client:
                             await client.post(telegram_url, json={
                                 'chat_id': referrer.id,
-                                'text': f"🎉 Ваш реферал оформил подписку! Вы получили +30 дней Premium до {referrer_expires.strftime('%d.%m.%Y')}!"
+                                'text': f"💎 <b>Бонус получен!</b>\n\n"
+                                        f"{referred_name} оформил подписку!\n"
+                                        f"Вы получили +30 дней Premium до {referrer_expires.strftime('%d.%m.%Y')}!",
+                                'parse_mode': 'HTML'
                             })
                     except Exception as e:
                         print(f"Failed to send referral notification: {e}")

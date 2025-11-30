@@ -215,6 +215,14 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
           )}
 
           <button
+            onClick={() => onNavigate(ViewState.REFERRAL)}
+            className="px-3 py-1.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-600 text-white text-xs font-bold shadow-lg hover:scale-105 transition-transform flex items-center gap-1"
+          >
+            🎁
+            Пригласить
+          </button>
+
+          <button
             onClick={() => setShowPayment(true)}
             className="px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs font-bold shadow-lg hover:scale-105 transition-transform flex items-center gap-1"
           >

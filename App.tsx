@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PlayerProvider, usePlayer } from './context/PlayerContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { ViewState } from './types';
 import BottomNav from './components/BottomNav';
 import MiniPlayer from './components/MiniPlayer';
@@ -39,7 +40,7 @@ const AppContent: React.FC = () => {
       if (!user) return;
 
       const initData = window.Telegram?.WebApp?.initDataUnsafe;
-      const startParam = initData?.start_param;
+      const startParam = (initData as any)?.start_param;
 
       if (startParam && startParam.startsWith('REF')) {
         try {
@@ -218,7 +219,9 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <PlayerProvider>
-      <AppContent />
+      <NotificationProvider>
+        <AppContent />
+      </NotificationProvider>
     </PlayerProvider>
   );
 };
