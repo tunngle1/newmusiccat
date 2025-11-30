@@ -185,7 +185,7 @@ const FullPlayer: React.FC<FullPlayerProps> = ({ onCollapse }) => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center pt-safe pb-safe overflow-hidden transition-colors duration-700"
+      className="fixed top-0 left-0 w-full h-[var(--tg-viewport-height,100vh)] z-50 flex flex-col items-center pt-safe pb-safe overflow-hidden transition-colors duration-700"
       style={{
         backgroundColor,
         transform: `translateY(${dragOffset}px)`,

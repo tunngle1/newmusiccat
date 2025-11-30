@@ -180,13 +180,13 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="relative min-h-screen bg-black text-white pb-24 overflow-x-hidden">
+    <div className="relative min-h-tg-screen bg-black text-white pb-24 overflow-x-hidden">
       {/* Background Gradient */}
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/40 via-black to-black z-0 pointer-events-none" />
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-transparent z-0 pointer-events-none" />
 
       {/* Main Content Area */}
-      <main className="w-full max-w-md mx-auto min-h-screen relative z-10">
+      <main className="w-full max-w-md mx-auto min-h-tg-screen relative z-10">
         {renderView()}
       </main>
 

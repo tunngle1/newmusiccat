@@ -109,6 +109,45 @@ export const isTelegramWebApp = (): boolean => {
 };
 
 /**
+ * Инициализация Viewport (высоты экрана)
+ */
+export const initViewport = () => {
+    const webApp = getTelegramWebApp();
+
+    const setViewportHeight = () => {
+        // Если мы в Telegram WebApp
+        if (webApp) {
+            // Используем viewportStableHeight если доступен, иначе viewportHeight
+            const height = webApp.viewportStableHeight || webApp.viewportHeight || window.innerHeight;
+            document.documentElement.style.setProperty('--tg-viewport-height', `${height}px`);
+            document.documentElement.style.setProperty('--tg-viewport-stable-height', `${webApp.viewportStableHeight || height}px`);
+        } else {
+            // Fallback для обычного браузера
+            document.documentElement.style.setProperty('--tg-viewport-height', `${window.innerHeight}px`);
+            document.documentElement.style.setProperty('--tg-viewport-stable-height', `${window.innerHeight}px`);
+        }
+    };
+
+    // Устанавливаем начальную высоту
+    setViewportHeight();
+
+    // Слушаем изменение размера (для Telegram WebApp)
+    if (webApp) {
+        webApp.onEvent('viewportChanged', setViewportHeight);
+    }
+
+    // Слушаем обычный resize
+    window.addEventListener('resize', setViewportHeight);
+
+    return () => {
+        if (webApp) {
+            webApp.offEvent('viewportChanged', setViewportHeight);
+        }
+        window.removeEventListener('resize', setViewportHeight);
+    };
+};
+
+/**
  * Инициализация Telegram WebApp
  */
 export const initTelegramWebApp = (): TelegramWebApp | null => {
@@ -120,6 +159,9 @@ export const initTelegramWebApp = (): TelegramWebApp | null => {
 
         // Разворачиваем приложение на весь экран
         webApp.expand();
+
+        // Инициализируем viewport
+        initViewport();
 
         // Отключаем вертикальные свайпы (свайп вниз для закрытия)
         disableVerticalSwipes();
@@ -136,6 +178,8 @@ export const initTelegramWebApp = (): TelegramWebApp | null => {
         });
     } else {
         console.warn('Not running in Telegram WebApp environment');
+        // Даже если не в Telegram, инициализируем viewport для корректной работы 100vh
+        initViewport();
     }
 
     return webApp;
