@@ -835,7 +835,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const reader = audioResponse.body?.getReader();
       const chunks: Uint8Array[] = [];
 
-      if (reader && total > 0) {
+      if (reader) {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -844,8 +844,10 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           loaded += value.length;
 
           // Update progress (0-90% for audio download)
-          const progress = Math.min(90, (loaded / total) * 90);
-          setDownloadProgress(prev => new Map(prev).set(track.id, progress));
+          if (total > 0) {
+            const progress = Math.min(90, (loaded / total) * 90);
+            setDownloadProgress(prev => new Map(prev).set(track.id, progress));
+          }
         }
       }
 
