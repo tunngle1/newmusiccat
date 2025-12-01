@@ -70,6 +70,10 @@ interface PlayerContextType {
   favoriteRadios: Set<string>;
   toggleFavoriteRadio: (radioId: string) => Promise<void>;
   markTrackAsDownloaded: (trackId: string) => void;
+  // Download to Chat
+  downloadToChatQueue: Track[];
+  isDownloadingToChat: string | null;
+  downloadToChat: (track: Track) => void;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
@@ -97,6 +101,10 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // Favorites State
   const [favorites, setFavorites] = useState<Track[]>([]);
   const [favoriteRadios, setFavoriteRadios] = useState<Set<string>>(new Set());
+
+  // Download to Chat Queue
+  const [downloadToChatQueue, setDownloadToChatQueue] = useState<Track[]>([]);
+  const [isDownloadingToChat, setIsDownloadingToChat] = useState<string | null>(null);
 
   const toggleFavorite = async (track: Track) => {
     try {
@@ -830,11 +838,26 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       let audioResponse: Response;
 
       // Для YouTube треков используем специальный endpoint
+      // Для YouTube треков используем специальный endpoint
       if (track.id.startsWith('yt_')) {
         console.log("YouTube track detected, using download endpoint");
-        const downloadUrl = `${API_BASE_URL}/api/youtube/download_file?url=${encodeURIComponent(track.audioUrl)}`;
-        console.log("Download URL:", downloadUrl);
-        audioResponse = await fetch(downloadUrl);
+
+        // Simulate progress while waiting for backend to download from YouTube
+        // This prevents the UI from looking "stuck" at 0%
+        let fakeProgress = 0;
+        const progressInterval = setInterval(() => {
+          fakeProgress += 2; // Increment by 2% every 500ms
+          if (fakeProgress > 30) fakeProgress = 30; // Cap at 30% until download starts
+          setDownloadProgress(prev => new Map(prev).set(track.id, fakeProgress));
+        }, 500);
+
+        try {
+          const downloadUrl = `${API_BASE_URL}/api/youtube/download_file?url=${encodeURIComponent(track.audioUrl)}`;
+          console.log("Download URL:", downloadUrl);
+          audioResponse = await fetch(downloadUrl);
+        } finally {
+          clearInterval(progressInterval);
+        }
       } else {
         audioResponse = await fetch(track.audioUrl);
       }
@@ -927,6 +950,54 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   }, [isDownloading, downloadQueueState]);
 
+  // Download to Chat Queue Processor
+  useEffect(() => {
+    if (!isDownloadingToChat && downloadToChatQueue.length > 0) {
+      const nextTrack = downloadToChatQueue[0];
+      processDownloadToChat(nextTrack);
+    }
+  }, [isDownloadingToChat, downloadToChatQueue]);
+
+  const processDownloadToChat = async (track: Track) => {
+    try {
+      setIsDownloadingToChat(track.id);
+      const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
+
+      // If no user (e.g. testing in browser), we can't send to chat
+      if (!user) {
+        console.warn('User not found (not in Telegram?), skipping download to chat');
+        // Just simulate delay
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/download/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          track: track
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to send to chat');
+
+    } catch (e) {
+      console.error("Download to chat failed:", e);
+    } finally {
+      setIsDownloadingToChat(null);
+      setDownloadToChatQueue(prev => prev.slice(1));
+    }
+  };
+
+  const downloadToChat = (track: Track) => {
+    // Check if already in queue or downloading
+    if (isDownloadingToChat === track.id || downloadToChatQueue.some(t => t.id === track.id)) {
+      return;
+    }
+    setDownloadToChatQueue(prev => [...prev, track]);
+  };
+
   const downloadTrack = async (track: Track) => {
     // Check if already downloaded
     if (downloadedTracks.has(track.id)) return;
@@ -1000,7 +1071,10 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       toggleFavorite,
       favoriteRadios,
       toggleFavoriteRadio,
-      markTrackAsDownloaded
+      markTrackAsDownloaded,
+      downloadToChatQueue,
+      isDownloadingToChat,
+      downloadToChat
     }}>
       {children}
     </PlayerContext.Provider>

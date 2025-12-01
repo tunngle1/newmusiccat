@@ -7,14 +7,29 @@ import { API_BASE_URL } from '../constants';
 import CircularProgress from '../components/CircularProgress';
 
 const LibraryView: React.FC = () => {
-  const { addTrack, playTrack, currentTrack, isPlaying, removeDownloadedTrack, togglePlay, downloadProgress, downloadTrack, downloadedTracks, downloadQueue, isDownloading: isDownloadingId } = usePlayer();
+  const {
+    addTrack,
+    playTrack,
+    currentTrack,
+    isPlaying,
+    removeDownloadedTrack,
+    togglePlay,
+    downloadProgress,
+    downloadTrack,
+    downloadedTracks,
+    downloadQueue,
+    isDownloading: isDownloadingId,
+    downloadToChat,
+    downloadToChatQueue,
+    isDownloadingToChat
+  } = usePlayer();
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [libraryTracks, setLibraryTracks] = useState<Track[]>([]);
 
   // YouTube State
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [isYoutubeLoading, setIsYoutubeLoading] = useState(false);
-  const [isDownloadingChat, setIsDownloadingChat] = useState(false);
   const [foundYoutubeTrack, setFoundYoutubeTrack] = useState<Track | null>(null);
 
   const handleYoutubeSearch = async () => {
@@ -56,32 +71,14 @@ const LibraryView: React.FC = () => {
         setYoutubeUrl('');
         setFoundYoutubeTrack(null);
       } else {
-        setIsDownloadingChat(true);
-        // Download to Chat
-        const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
-        if (!user) {
-          alert('Ошибка: Не удалось определить пользователя Telegram');
-          return;
-        }
-
-        const response = await fetch(`${API_BASE_URL}/api/download/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: user.id,
-            track: foundYoutubeTrack
-          })
-        });
-
-        if (!response.ok) throw new Error('Ошибка отправки в чат');
-        alert('Трек отправлен в чат!');
+        // Download to Chat using context queue
+        downloadToChat(foundYoutubeTrack);
+        alert('Трек добавлен в очередь отправки в чат!');
         setYoutubeUrl('');
         setFoundYoutubeTrack(null);
       }
     } catch (e) {
-      alert('Ошибка загрузки: ' + e);
-    } finally {
-      setIsDownloadingChat(false);
+      alert('Ошибка: ' + e);
     }
   };
 
@@ -157,6 +154,11 @@ const LibraryView: React.FC = () => {
     }
   };
 
+  // Helper to check if a track is in the chat download queue
+  const isTrackInChatQueue = (trackId: string) => {
+    return isDownloadingToChat === trackId || downloadToChatQueue.some(t => t.id === trackId);
+  };
+
   return (
     <div className="px-4 py-8 space-y-6 animate-fade-in-up pb-24">
       <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
@@ -196,7 +198,6 @@ const LibraryView: React.FC = () => {
             <div className="flex gap-2">
               <button
                 onClick={() => handleYoutubeDownload('app')}
-                disabled={isDownloadingChat}
                 className="p-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 disabled:opacity-50"
                 title="Скачать в приложение"
               >
@@ -204,11 +205,11 @@ const LibraryView: React.FC = () => {
               </button>
               <button
                 onClick={() => handleYoutubeDownload('chat')}
-                disabled={isDownloadingChat}
+                disabled={isTrackInChatQueue(foundYoutubeTrack.id)}
                 className="p-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 disabled:opacity-50"
                 title="Отправить в чат"
               >
-                {isDownloadingChat ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+                {isTrackInChatQueue(foundYoutubeTrack.id) ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
               </button>
             </div>
           </div>
