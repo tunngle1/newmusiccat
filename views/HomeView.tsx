@@ -49,18 +49,66 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
     }
 
     const handleScroll = () => {
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Search, Play, Pause, SkipForward, SkipBack, Heart, Download, Check, RefreshCw, Loader, Settings, MoreVertical } from 'lucide-react';
+import { usePlayer } from '../context/PlayerContext';
+import { Track, ViewState } from '../types';
+import { searchTracks, getGenreTracks, downloadToChat } from '../utils/api';
+import { hapticFeedback, getTelegramUser } from '../utils/telegram';
+import { deduplicateTracks } from '../utils/deduplication';
+import SubscriptionBadge from '../components/SubscriptionBadge';
+import PaymentView from '../views/PaymentView';
+
+interface HomeViewProps {
+  onNavigate: (view: ViewState) => void;
+}
+
+const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
+  const {
+    playTrack,
+    playRadio,
+    currentTrack,
+    currentRadio,
+    isRadioMode,
+    isPlaying,
+    allTracks,
+    downloadTrack,
+    downloadedTracks,
+    isDownloading,
+    togglePlay,
+    searchState,
+    setSearchState,
+    user,
+    favorites,
+    favoriteRadios,
+    toggleFavoriteRadio
+  } = usePlayer();
+
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [trackToAction, setTrackToAction] = useState<Track | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [showAllGenres, setShowAllGenres] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
+
+  console.log('HomeView Render:', { user, isAdmin: user?.is_admin, subStatus: user?.subscription_status });
+
+  // Scroll restoration
+  useEffect(() => {
+    const savedScroll = sessionStorage.getItem('homeScroll');
+    if (savedScroll) {
+      window.scrollTo(0, parseInt(savedScroll));
+    }
+
+    const handleScroll = () => {
       sessionStorage.setItem('homeScroll', window.scrollY.toString());
     };
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-  const { playlists, addToPlaylist } = usePlayer();
+  const { playlists, addToPlaylist, downloadToChat: downloadToChatContext } = usePlayer();
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [trackToDownload, setTrackToDownload] = useState<Track | null>(null);
-  const [showProgressModal, setShowProgressModal] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [downloadStatus, setDownloadStatus] = useState<'downloading' | 'uploading' | 'done'>('downloading');
 
 
   // Отображаемые треки: результаты поиска или все треки (с дедупликацией)
@@ -624,65 +672,15 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
 
               <button
                 className="w-full py-4 bg-purple-600 rounded-xl font-medium text-white hover:bg-purple-500 transition-colors flex items-center justify-center gap-2"
-                onClick={async () => {
-                  try {
-                    const user = getTelegramUser();
-                    if (!user) {
-                      if (window.Telegram?.WebApp?.showAlert) {
-                        window.Telegram.WebApp.showAlert('Не удалось получить данные пользователя');
-                      }
-                      return;
-                    }
+                onClick={() => {
+                  // Use context downloadToChat queue
+                  downloadToChatContext(trackToDownload);
+                  setShowDownloadModal(false);
+                  setTrackToDownload(null);
+                  hapticFeedback.success();
 
-                    // Close download modal and show progress modal
-                    setShowDownloadModal(false);
-                    setShowProgressModal(true);
-                    setDownloadProgress(0);
-                    setDownloadStatus('downloading');
-
-                    // Simulate download progress
-                    const progressInterval = setInterval(() => {
-                      setDownloadProgress(prev => {
-                        if (prev >= 50) {
-                          clearInterval(progressInterval);
-                          setDownloadStatus('uploading');
-
-                          // Simulate upload progress
-                          const uploadInterval = setInterval(() => {
-                            setDownloadProgress(prev => {
-                              if (prev >= 100) {
-                                clearInterval(uploadInterval);
-                                return 100;
-                              }
-                              return prev + 2;
-                            });
-                          }, 100);
-
-                          return 50;
-                        }
-                        return prev + 2;
-                      });
-                    }, 100);
-
-                    // Actually download to chat
-                    await downloadToChat(user.id, trackToDownload);
-
-                    setDownloadProgress(100);
-                    setDownloadStatus('done');
-                    hapticFeedback.success();
-
-                    // Close progress modal after a short delay
-                    setTimeout(() => {
-                      setShowProgressModal(false);
-                      setTrackToDownload(null);
-                    }, 1500);
-
-                  } catch (error) {
-                    console.error('Download to chat error:', error);
-                    setShowProgressModal(false);
-                    if (window.Telegram?.WebApp?.showAlert) {
-                      window.Telegram.WebApp.showAlert('Ошибка при отправке в чат');
-                    }
+                  if (window.Telegram?.WebApp?.showAlert) {
+                    window.Telegram.WebApp.showAlert('Трек добавлен в очередь отправки!');
                   }
                 }}
               >
@@ -699,76 +697,6 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
               >
                 Отмена
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Progress Modal */}
-      {showProgressModal && trackToDownload && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 backdrop-blur-sm px-4 animate-fade-in">
-          <div className="bg-gray-900 w-full max-w-sm p-8 rounded-2xl border border-white/10 shadow-2xl">
-            <div className="text-center space-y-6">
-              {/* Track Info */}
-              <div className="flex items-center gap-4 pb-4 border-b border-white/10">
-                <img
-                  src={trackToDownload.coverUrl}
-                  alt={trackToDownload.title}
-                  className="w-16 h-16 rounded-lg object-cover"
-                />
-                <div className="flex-1 text-left">
-                  <h4 className="text-white font-semibold truncate">{trackToDownload.title}</h4>
-                  <p className="text-gray-400 text-sm truncate">{trackToDownload.artist}</p>
-                </div>
-              </div>
-
-              {/* Status Text */}
-              <div className="space-y-2">
-                <h3 className="text-lg font-bold text-white">
-                  {downloadStatus === 'downloading' && 'Загрузка трека...'}
-                  {downloadStatus === 'uploading' && 'Отправка в чат...'}
-                  {downloadStatus === 'done' && '✓ Готово!'}
-                </h3>
-                <p className="text-sm text-gray-400">
-                  {downloadStatus === 'downloading' && 'Скачиваем аудиофайл'}
-                  {downloadStatus === 'uploading' && 'Отправляем через бота'}
-                  {downloadStatus === 'done' && 'Трек отправлен в ваш чат'}
-                </p>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="space-y-2">
-                <div className="w-full h-3 bg-gray-800 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-300 ease-out ${downloadStatus === 'done'
-                      ? 'bg-gradient-to-r from-green-500 to-emerald-500'
-                      : 'bg-gradient-to-r from-blue-500 to-purple-500'
-                      }`}
-                    style={{ width: `${downloadProgress}%` }}
-                  />
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-400">
-                    {downloadProgress < 100 ? `${Math.round(downloadProgress)}%` : 'Завершено'}
-                  </span>
-                  <span className="text-gray-500">
-                    {downloadProgress < 100
-                      ? `~${Math.ceil((100 - downloadProgress) / 10)} сек`
-                      : ''}
-                  </span>
-                </div>
-              </div>
-
-              {/* Loading Animation */}
-              {downloadStatus !== 'done' && (
-                <div className="flex justify-center">
-                  <div className="flex space-x-2">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                    <div className="w-2 h-2 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
