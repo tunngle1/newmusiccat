@@ -28,7 +28,16 @@ const LibraryView: React.FC = () => {
         body: JSON.stringify({ url: youtubeUrl })
       });
       if (!response.ok) throw new Error('Не удалось найти видео');
-      const track = await response.json();
+      const trackData = await response.json();
+
+      // Map backend response to Track interface
+      // IMPORTANT: Map 'url' (from backend) to 'audioUrl' (expected by frontend)
+      const track: Track = {
+        ...trackData,
+        audioUrl: trackData.url,
+        coverUrl: trackData.image
+      };
+
       setFoundYoutubeTrack(track);
     } catch (e) {
       alert('Ошибка: ' + e);

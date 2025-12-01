@@ -1433,6 +1433,8 @@ async def get_youtube_info(request: YouTubeRequest):
                 artist = uploader
                 track_title = clean_title
                 
+            print(f"YouTube track created: id={video_id}, url={original_url}")
+                
             return Track(
                 id=f"yt_{video_id}",
                 title=track_title,

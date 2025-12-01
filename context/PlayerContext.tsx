@@ -823,6 +823,8 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setDownloadProgress(prev => new Map(prev).set(track.id, 0));
 
       console.log("Downloading track:", track.title);
+      console.log("Track audioUrl:", track.audioUrl);
+      console.log("Track id:", track.id);
 
       // 1. Скачиваем аудио с отслеживанием прогресса
       let audioResponse: Response;
@@ -831,6 +833,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       if (track.id.startsWith('yt_')) {
         console.log("YouTube track detected, using download endpoint");
         const downloadUrl = `${API_BASE_URL}/api/youtube/download_file?url=${encodeURIComponent(track.audioUrl)}`;
+        console.log("Download URL:", downloadUrl);
         audioResponse = await fetch(downloadUrl);
       } else {
         audioResponse = await fetch(track.audioUrl);
