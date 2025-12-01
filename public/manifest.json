@@ -1,21 +1,29 @@
 {
     "name": "TG Music Player",
     "short_name": "TG Music",
+    "description": "Музыкальный плеер для Telegram",
     "start_url": "/",
+    "scope": "/",
     "display": "standalone",
     "background_color": "#0f0f0f",
     "theme_color": "#0f0f0f",
     "orientation": "portrait",
+    "categories": [
+        "music",
+        "entertainment"
+    ],
     "icons": [
         {
             "src": "/icon-192.png",
             "type": "image/png",
-            "sizes": "192x192"
+            "sizes": "192x192",
+            "purpose": "any"
         },
         {
             "src": "/icon-512.png",
             "type": "image/png",
-            "sizes": "512x512"
+            "sizes": "512x512",
+            "purpose": "any maskable"
         }
     ]
 }
