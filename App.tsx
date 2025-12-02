@@ -40,7 +40,7 @@ import { formatDuration, searchTracks, getGenreTracks, getLyrics as getLyricsApi
 import { initTelegramWebApp } from './utils/telegram';
 import { API_BASE_URL } from './constants';
 import AdminView from './views/AdminView';
-import AdminViewLocal from './views/AdminViewLocal';
+
 import SubscriptionView from './views/SubscriptionView';
 import { fetchLyrics } from './utils/lyricsClient';
 
@@ -1140,7 +1140,7 @@ const NewDesignApp: React.FC = () => {
       case ViewState.LIBRARY:
         return renderLibrary();
       case ViewState.ADMIN:
-        return <AdminViewLocal onBack={() => setActiveTab(ViewState.HOME)} currentUserId={user?.id} />;
+        return <AdminView onBack={() => setActiveTab(ViewState.HOME)} />;
       case ViewState.SUBSCRIPTION:
         return <SubscriptionView onBack={() => setActiveTab(ViewState.HOME)} userId={user?.id} />;
       default:

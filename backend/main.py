@@ -1454,6 +1454,96 @@ async def expire_downloads(user_id: int = Query(...), db: Session = Depends(get_
 class YouTubeRequest(BaseModel):
     url: str
 
+@app.get("/api/admin/stats")
+async def get_admin_stats(user_id: int = Query(...), db: Session = Depends(get_db)):
+    """Get admin dashboard stats"""
+    # Verify admin
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+        
+    # Calculate stats
+    total_users = db.query(User).count()
+    premium_users = db.query(User).filter(User.is_premium == True).count()
+    admin_users = db.query(User).filter(User.is_admin == True).count()
+    
+    today = datetime.utcnow().date()
+    new_users_today = db.query(User).filter(User.joined_at >= today).count()
+    
+    # Calculate revenue (mock for now or sum from payments)
+    total_revenue_ton = 0.0
+    total_revenue_stars = 0
+    total_revenue_rub = 0.0
+    
+    payments = db.query(Payment).filter(Payment.status == 'completed').all()
+    for p in payments:
+        if p.currency == 'TON':
+            try:
+                total_revenue_ton += float(p.amount)
+            except:
+                pass
+        elif p.currency == 'XTR':
+            try:
+                total_revenue_stars += int(p.amount)
+            except:
+                pass
+                
+    return {
+        "total_users": total_users,
+        "premium_users": premium_users,
+        "admin_users": admin_users,
+        "new_users_today": new_users_today,
+        "total_revenue_ton": total_revenue_ton,
+        "total_revenue_stars": total_revenue_stars,
+        "total_revenue_rub": total_revenue_rub
+    }
+
+@app.get("/api/admin/cache/stats")
+async def get_admin_cache_stats(user_id: int = Query(...), db: Session = Depends(get_db)):
+    """Get cache statistics"""
+    # Verify admin
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+        
+    return get_cache_stats()
+
+@app.get("/api/admin/users")
+async def get_admin_users(
+    user_id: int = Query(...), 
+    filter_type: str = Query("all"),
+    db: Session = Depends(get_db)
+):
+    """Get users list with filtering"""
+    # Verify admin
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+        
+    query = db.query(User)
+    
+    if filter_type == 'premium':
+        query = query.filter(User.is_premium == True)
+    elif filter_type == 'admin':
+        query = query.filter(User.is_admin == True)
+        
+    users = query.limit(100).all()
+    
+    return {
+        "users": [
+            {
+                "id": u.id,
+                "username": u.username,
+                "first_name": u.first_name,
+                "last_name": u.last_name,
+                "is_admin": u.is_admin,
+                "is_premium": u.is_premium,
+                "is_blocked": u.is_blocked
+            }
+            for u in users
+        ]
+    }
+
 @app.post("/api/youtube/info", response_model=Track)
 async def get_youtube_info(request: YouTubeRequest):
     """
