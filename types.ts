@@ -118,3 +118,41 @@ export interface GrantRequest {
   trial_days?: number;
   premium_days?: number;
 }
+
+export interface Transaction {
+  id: number;
+  user_id: number;
+  amount: string;
+  currency: string;
+  plan: string;
+  status: string;
+  created_at: string;
+}
+
+export interface PromoCode {
+  id: number;
+  code: string;
+  discount_type: string;
+  value: number;
+  used_count: number;
+  max_uses: number;
+  expires_at: string | null;
+}
+
+export interface TopUser {
+  id: number;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  download_count: number;
+  is_premium: boolean;
+}
+
+export interface CacheStats {
+  total_entries: number;
+  cache_hits: number;
+  cache_misses: number;
+  hit_ratio: number;
+  ttl_seconds: number;
+  sample_keys: string[];
+}
