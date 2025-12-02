@@ -502,7 +502,8 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             console.log("Playing from blob cache:", currentTrack.title);
           }
           // 2. Fallback to Async DB load if downloaded but not cached
-          else if (isCurrentTrackDownloaded) {
+          // IMPORTANT: Don't try to load from DB if it's currently downloading!
+          else if (isCurrentTrackDownloaded && !downloadProgress.has(currentTrack.id)) {
             try {
               const savedTrack = await storage.getTrack(currentTrack.id);
               if (savedTrack && savedTrack.audioBlob) {
@@ -516,6 +517,10 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                   const coverUrl = URL.createObjectURL(savedTrack.coverBlob);
                   currentTrack.coverUrl = coverUrl;
                 }
+              } else {
+                // If marked as downloaded but no blob found (e.g. error), fallback to URL
+                console.warn("Track marked as downloaded but no blob found, using URL");
+                src = currentTrack.audioUrl;
               }
             } catch (e) {
               console.error("Error loading local track:", e);

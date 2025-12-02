@@ -31,3 +31,6 @@ export const MOCK_TRACKS: Track[] = [
 export const INITIAL_PLAYLISTS: Playlist[] = [];
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+export const TRIBUTE_LINK_MONTH = import.meta.env.VITE_TRIBUTE_LINK_MONTH || 'https://t.me/tribute/app?startapp=pnxU';
+export const TRIBUTE_LINK_YEAR = import.meta.env.VITE_TRIBUTE_LINK_YEAR || 'https://t.me/tribute/app?startapp=pnxW';

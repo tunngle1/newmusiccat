@@ -204,12 +204,16 @@ const NewDesignApp: React.FC = () => {
   useEffect(() => {
     const style = document.createElement('style');
     style.innerHTML = `
-      @keyframes jump {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-4px); }
+      @keyframes pulse-red {
+        0%, 100% { opacity: 0.4; transform: scale(0.8); }
+        50% { opacity: 1; transform: scale(1.2); }
       }
       .jumping-dot {
-        animation: jump 0.6s infinite;
+        animation: pulse-red 1s infinite;
+        background-color: #ef4444;
+        border-radius: 50%;
+        width: 4px;
+        height: 4px;
       }
       .jumping-dot:nth-child(2) { animation-delay: 0.2s; }
       .jumping-dot:nth-child(3) { animation-delay: 0.4s; }
@@ -288,17 +292,27 @@ const NewDesignApp: React.FC = () => {
   const loadMoreSearch = async () => {
     const query = searchState.query.trim();
     const mode = searchState.searchMode as SearchMode;
-    if (!query || searchState.isSearching || !searchState.hasMore) return;
+    // Allow loading more if there is a query OR a genreId
+    if ((!query && !searchState.genreId) || searchState.isSearching || !searchState.hasMore) return;
+
     const nextPage = (searchState.page || 1) + 1;
     setIsLoadMoreLoading(true);
     setSearchState(prev => ({ ...prev, isSearching: true }));
+
     try {
-      const newResults = await searchTracks(query, 20, nextPage, mode);
+      let newResults: Track[] = [];
+      if (searchState.genreId) {
+        newResults = await getGenreTracks(searchState.genreId, 20, nextPage);
+      } else {
+        newResults = await searchTracks(query, 20, nextPage, mode);
+      }
+
       setSearchState(prev => {
-        if (prev.query.trim() !== query || prev.searchMode !== mode) {
-          // Query changed while loading more; discard this page
+        // If query changed or genre changed while loading, discard
+        if ((query && prev.query.trim() !== query) || (!query && prev.genreId !== searchState.genreId)) {
           return prev;
         }
+
         const combined = [...prev.results, ...newResults];
         const unique = combined.filter(
           (track, idx, arr) => arr.findIndex((t) => t.title === track.title && t.artist === track.artist) === idx
