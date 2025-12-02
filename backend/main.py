@@ -78,6 +78,30 @@ class Transaction(BaseModel):
     status: str
     created_at: datetime
 
+class TrackInput(BaseModel):
+    id: str
+    title: str
+    artist: str
+    duration: int
+    audioUrl: str
+    coverUrl: str
+
+class DownloadToChatRequest(BaseModel):
+    user_id: int
+    track: TrackInput
+
+class TrackInput(BaseModel):
+    id: str
+    title: str
+    artist: str
+    duration: int
+    audioUrl: str
+    coverUrl: str
+
+class DownloadToChatRequest(BaseModel):
+    user_id: int
+    track: TrackInput
+
 class TransactionListResponse(BaseModel):
     transactions: List[Transaction]
     total: int
@@ -298,6 +322,53 @@ async def auth_user(user_data: UserAuth, db: Session = Depends(get_db)):
             trial_started_at=now,
             trial_expires_at=trial_expires
         )
+        db.add(user)
+        db.commit()
+    
+    # Обновляем данные если изменились
+    if user.username != user_data.username or \
+       user.first_name != user_data.first_name or \
+       user.last_name != user_data.last_name:
+        user.username = user_data.username
+        user.first_name = user_data.first_name
+        user.last_name = user_data.last_name
+        db.commit()
+        
+    return {"status": "ok", "user": user}
+
+@app.post("/api/download/chat")
+async def download_to_chat(request: DownloadToChatRequest):
+    """Send track to user via Telegram Bot"""
+    bot_token = os.getenv("BOT_TOKEN")
+    if not bot_token:
+        raise HTTPException(status_code=500, detail="Bot token not configured")
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Send audio
+            payload = {
+                "chat_id": request.user_id,
+                "audio": request.track.audioUrl,
+                "title": request.track.title,
+                "performer": request.track.artist,
+                "duration": request.track.duration
+            }
+            
+            # Telegram API sendAudio
+            response = await client.post(
+                f"https://api.telegram.org/bot{bot_token}/sendAudio",
+                data=payload
+            )
+            
+            if response.status_code != 200:
+                print(f"Telegram API Error: {response.text}")
+                raise HTTPException(status_code=500, detail=f"Failed to send audio: {response.text}")
+                
+            return {"status": "ok"}
+            
+    except Exception as e:
+        print(f"Download to chat error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
         db.add(user)
     else:
         # Обновляем данные если изменились

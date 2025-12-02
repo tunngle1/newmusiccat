@@ -328,14 +328,8 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           }
         } catch (e) {
           console.error("Auth failed:", e);
-          // Fallback for dev/testing if needed
-          if (tgUser.id === 414153884) {
-            setUser({ id: 414153884, is_admin: true, is_premium: true });
-          }
+          // Fallback removed for production
         }
-      } else {
-        // Dev fallback
-        // setUser({ id: 414153884, is_admin: true, is_premium: true });
       }
 
       // 2. Load Data
