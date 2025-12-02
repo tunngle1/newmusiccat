@@ -966,26 +966,35 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const processDownloadToChat = async (track: Track) => {
     try {
       setIsDownloadingToChat(track.id);
+      
+      // Get user from initDataUnsafe or fallback to a test user ID if in development
       const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
+      const userId = user?.id || (import.meta.env.DEV ? 414153884 : null); // Fallback for dev
 
-      // If no user (e.g. testing in browser), we can't send to chat
-      if (!user) {
-        console.warn('User not found (not in Telegram?), skipping download to chat');
-        // Just simulate delay
+      if (!userId) {
+        console.warn('User ID not found, cannot send to chat');
+        // Simulate delay to show UI feedback
         await new Promise(resolve => setTimeout(resolve, 1000));
         return;
       }
+
+      console.log(`Sending track ${track.id} to chat for user ${userId}`);
 
       const response = await fetch(`${API_BASE_URL}/api/download/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: user.id,
+          user_id: userId,
           track: track
         })
       });
 
-      if (!response.ok) throw new Error('Failed to send to chat');
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to send to chat: ${errorText}`);
+      }
+      
+      console.log("Successfully sent to chat");
 
     } catch (e) {
       console.error("Download to chat failed:", e);

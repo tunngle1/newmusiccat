@@ -192,12 +192,33 @@ const NewDesignApp: React.FC = () => {
       const downloaded = allTracksSafe.filter((t) => downloadedTracks.has(t.id));
       // Add queued tracks that aren't already downloaded
       const queued = downloadQueue.filter(t => !downloadedTracks.has(t.id));
-      return [...downloaded, ...queued];
+      // Show queued first, then downloaded (reversed to show newest first)
+      return [...queued, ...downloaded.reverse()];
     },
     [allTracksSafe, downloadedTracks, downloadQueue]
   );
 
   const popularTracks = useMemo(() => allTracksSafe.slice(0, 6), [allTracksSafe]);
+
+  // Add styles for jumping dots animation
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      @keyframes jump {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-4px); }
+      }
+      .jumping-dot {
+        animation: jump 0.6s infinite;
+      }
+      .jumping-dot:nth-child(2) { animation-delay: 0.2s; }
+      .jumping-dot:nth-child(3) { animation-delay: 0.4s; }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   const genres = useMemo(() => {
     const values = allTracksSafe
@@ -700,9 +721,19 @@ const NewDesignApp: React.FC = () => {
               }}
               className="p-1.5 rounded-full hover:bg-lebedev-red hover:text-white transition-colors text-gray-200"
               title="Скачать в приложение"
-              disabled={isDownloaded}
+              disabled={isDownloaded || progress !== undefined}
             >
-              {isDownloaded ? <CheckIcon className="w-5 h-5 opacity-100" /> : <DownloadIcon className="w-5 h-5" />}
+              {isDownloaded ? (
+                <CheckIcon className="w-5 h-5 opacity-100" />
+              ) : progress !== undefined ? (
+                <div className="flex gap-0.5 items-center justify-center w-5 h-5">
+                  <div className="w-1 h-1 bg-lebedev-red rounded-full jumping-dot"></div>
+                  <div className="w-1 h-1 bg-lebedev-red rounded-full jumping-dot"></div>
+                  <div className="w-1 h-1 bg-lebedev-red rounded-full jumping-dot"></div>
+                </div>
+              ) : (
+                <DownloadIcon className="w-5 h-5" />
+              )}
             </button>
           </div>
         </div>
