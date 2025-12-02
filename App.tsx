@@ -108,6 +108,7 @@ const NewDesignApp: React.FC = () => {
     downloadTrack,
     downloadedTracks,
     downloadProgress,
+    downloadQueue,
     downloadToChat,
     downloadToChatQueue,
     isDownloadingToChat,
@@ -127,11 +128,10 @@ const NewDesignApp: React.FC = () => {
   } = usePlayer();
 
   const [activeTab, setActiveTab] = useState<ViewState>(ViewState.HOME);
-
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [menuView, setMenuView] = useState<MenuView>('main');
+  const [menuView, setMenuView] = useState<'main' | 'subscription' | 'referrals'>('main');
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [isCoverColor, setIsCoverColor] = useState(false);
   const [recentTracks, setRecentTracks] = useState<Track[]>([]);
@@ -143,6 +143,7 @@ const NewDesignApp: React.FC = () => {
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [newPlaylistTitle, setNewPlaylistTitle] = useState('');
   const [newPlaylistCover, setNewPlaylistCover] = useState<File | null>(null);
+  const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
   const [editPlaylistTitle, setEditPlaylistTitle] = useState('');
   const [editPlaylistCover, setEditPlaylistCover] = useState<File | null>(null);
   const [showLyrics, setShowLyrics] = useState(false);
@@ -155,6 +156,12 @@ const NewDesignApp: React.FC = () => {
   const [radioStations, setRadioStations] = useState<any[]>([]);
   const [radioLoading, setRadioLoading] = useState(false);
   const [radioError, setRadioError] = useState<string | null>(null);
+
+  // Restore YouTube state variables
+  const [youtubeLink, setYoutubeLink] = useState('');
+  const [youtubeTrack, setYoutubeTrack] = useState<Track | null>(null);
+  const [isYoutubeLoading, setIsYoutubeLoading] = useState(false);
+
   const handleSelectArtist = (artistName: string) => {
     setShowArtistSelector(false);
     setSearchState(prev => ({
@@ -170,9 +177,7 @@ const NewDesignApp: React.FC = () => {
     setIsPlayerOpen(false);
     setActiveTab(ViewState.HOME);
   };
-  const [youtubeLink, setYoutubeLink] = useState('');
-  const [youtubeTrack, setYoutubeTrack] = useState<Track | null>(null);
-  const [isYoutubeLoading, setIsYoutubeLoading] = useState(false);
+
   const toastTimeout = useRef<number | null>(null);
   const progressBarRef = useRef<HTMLDivElement | null>(null);
 
@@ -183,8 +188,13 @@ const NewDesignApp: React.FC = () => {
   const hasAccess = user?.subscription_status?.has_access ?? true;
 
   const libraryTracks = useMemo(
-    () => allTracksSafe.filter((t) => downloadedTracks.has(t.id)),
-    [allTracksSafe, downloadedTracks]
+    () => {
+      const downloaded = allTracksSafe.filter((t) => downloadedTracks.has(t.id));
+      // Add queued tracks that aren't already downloaded
+      const queued = downloadQueue.filter(t => !downloadedTracks.has(t.id));
+      return [...downloaded, ...queued];
+    },
+    [allTracksSafe, downloadedTracks, downloadQueue]
   );
 
   const popularTracks = useMemo(() => allTracksSafe.slice(0, 6), [allTracksSafe]);

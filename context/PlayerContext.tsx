@@ -998,6 +998,13 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     // Immediately add to downloaded tracks (will show with 0% progress)
     setDownloadedTracks(prev => new Set(prev).add(track.id));
+    setDownloadProgress(prev => new Map(prev).set(track.id, 0));
+
+    // Add to allTracks if not present (e.g. from search)
+    setAllTracks(prev => {
+      if (prev.some(t => t.id === track.id)) return prev;
+      return [...prev, track];
+    });
 
     // Check if already in queue
     setDownloadQueue(prev => {
