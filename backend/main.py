@@ -326,39 +326,6 @@ async def auth_user(user_data: UserAuth, db: Session = Depends(get_db)):
         
     return {"status": "ok", "user": user}
 
-@app.post("/api/download/chat")
-async def download_to_chat(request: DownloadToChatRequest):
-    """Send track to user via Telegram Bot"""
-    bot_token = os.getenv("BOT_TOKEN")
-    if not bot_token:
-        raise HTTPException(status_code=500, detail="Bot token not configured")
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            # Send audio
-            payload = {
-                "chat_id": request.user_id,
-                "audio": request.track.audioUrl,
-                "title": request.track.title,
-                "performer": request.track.artist,
-                "duration": request.track.duration
-            }
-            
-            # Telegram API sendAudio
-            response = await client.post(
-                f"https://api.telegram.org/bot{bot_token}/sendAudio",
-                data=payload
-            )
-            
-            if response.status_code != 200:
-                print(f"Telegram API Error: {response.text}")
-                raise HTTPException(status_code=500, detail=f"Failed to send audio: {response.text}")
-                
-            return {"status": "ok"}
-            
-    except Exception as e:
-        print(f"Download to chat error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
         db.add(user)
     else:
         # Обновляем данные если изменились
@@ -1340,7 +1307,7 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
         
         # 1. Download audio file from URL (увеличен timeout для больших файлов)
         async with httpx.AsyncClient(timeout=120.0) as client:
-            audio_response = await client.get(request.track.url)
+            audio_response = await client.get(request.track.audioUrl)
             audio_response.raise_for_status()
             audio_data = audio_response.content
         
@@ -1353,10 +1320,10 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
         
         # Скачиваем обложку, если есть
         thumbnail_data = None
-        if request.track.image:
+        if request.track.coverUrl:
             try:
                 async with httpx.AsyncClient(timeout=30.0) as thumb_client:
-                    thumb_response = await thumb_client.get(request.track.image)
+                    thumb_response = await thumb_client.get(request.track.coverUrl)
                     if thumb_response.status_code == 200:
                         thumbnail_data = thumb_response.content
                         files['thumbnail'] = ('thumb.jpg', thumbnail_data, 'image/jpeg')

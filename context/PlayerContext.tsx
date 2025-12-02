@@ -396,7 +396,10 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const audio = audioRef.current;
 
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const handleLoadedMetadata = () => setDuration(audio.duration);
+    const handleLoadedMetadata = () => {
+      setDuration(audio.duration);
+      retryCount.current = 0; // Reset retry count on success
+    };
     const handleEnded = () => {
       const currentRepeatMode = repeatModeRef.current;
       const currentQueue = queueRef.current;
@@ -457,9 +460,46 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         audio.currentTime = 0;
       }
     };
-    const handleError = (e: Event) => {
+
+
+    const handleError = async (e: Event) => {
       console.error("Audio error:", e);
-      // Можно добавить логику пропуска трека при ошибке
+      
+      // Try to refresh URL if it fails (likely expired)
+      if (currentTrack && retryCount.current < 1) {
+        console.log("Attempting to refresh expired URL for:", currentTrack.title);
+        retryCount.current++;
+        
+        try {
+          // Construct YouTube URL from ID
+          const ytUrl = `https://www.youtube.com/watch?v=${currentTrack.id}`;
+          const response = await fetch(`${API_BASE_URL}/api/youtube/info`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: ytUrl })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.url) {
+              console.log("Refreshed URL successfully");
+              // Update current track with new URL
+              const updatedTrack = { ...currentTrack, audioUrl: data.url };
+              setCurrentTrack(updatedTrack);
+              
+              // Also update in allTracks if present
+              setAllTracks(prev => prev.map(t => t.id === updatedTrack.id ? updatedTrack : t));
+              
+              // Audio src will update automatically via the main useEffect
+              return;
+            }
+          }
+        } catch (err) {
+          console.error("Failed to refresh URL:", err);
+        }
+      }
+      
+      setIsPlaying(false);
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
@@ -476,13 +516,14 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       audio.src = '';
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Remove repeatMode from dependencies!
+  }, [currentTrack]); // Add currentTrack to dependencies to allow retry to trigger re-render
 
   // Управление воспроизведением при смене трека
   // Track if current track is downloaded (to avoid re-triggering when other tracks are downloaded)
   const isCurrentTrackDownloaded = currentTrack ? downloadedTracks.has(currentTrack.id) : false;
 
   const previousTrackIdRef = useRef<string | null>(null);
+  const retryCount = useRef(0);
 
   const blobUrlCache = useRef<Map<string, string>>(new Map());
 

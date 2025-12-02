@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Check, Crown } from 'lucide-react';
-import { API_BASE_URL } from '../constants';
+import { API_BASE_URL, TRIBUTE_LINK_MONTH, TRIBUTE_LINK_YEAR } from '../constants';
 
 interface SubscriptionViewProps {
     onBack: () => void;
@@ -197,8 +197,8 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({ onBack, userId }) =
                             key={plan.id}
                             onClick={() => setSelectedPlan(plan.id)}
                             className={`border-2 p-4 cursor-pointer transition-all relative ${selectedPlan === plan.id
-                                    ? 'border-red-500 bg-red-500/10'
-                                    : 'border-white/20 hover:border-white/40'
+                                ? 'border-red-500 bg-red-500/10'
+                                : 'border-white/20 hover:border-white/40'
                                 }`}
                         >
                             {plan.popular && (
