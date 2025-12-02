@@ -908,6 +908,17 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setDownloadProgress(prev => new Map(prev).set(track.id, 95));
       await storage.saveTrack(track, audioBlob, coverBlob);
 
+      // Trigger file download to device
+      const url = window.URL.createObjectURL(audioBlob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `${track.artist} - ${track.title}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
       // 4. Mark as complete
       setDownloadProgress(prev => new Map(prev).set(track.id, 100));
 
