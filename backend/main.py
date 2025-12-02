@@ -90,17 +90,7 @@ class DownloadToChatRequest(BaseModel):
     user_id: int
     track: TrackInput
 
-class TrackInput(BaseModel):
-    id: str
-    title: str
-    artist: str
-    duration: int
-    audioUrl: str
-    coverUrl: str
 
-class DownloadToChatRequest(BaseModel):
-    user_id: int
-    track: TrackInput
 
 class TransactionListResponse(BaseModel):
     transactions: List[Transaction]
