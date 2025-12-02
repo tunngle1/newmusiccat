@@ -386,36 +386,39 @@ const NewDesignApp: React.FC = () => {
 
     let cancelled = false;
     const controller = new AbortController();
-    const run = async () => {
-      setSearchState((prev) => ({ ...prev, isSearching: true, error: null, page: 1, results: [] }));
-      try {
-        const results = await searchTracks(query, 20, 1, mode, controller.signal);
-        const unique = results.filter(
-          (track, idx, arr) => arr.findIndex((t) => t.title === track.title && t.artist === track.artist) === idx
-        );
-        if (cancelled) return;
-        setSearchState((prev) => ({
-          ...prev,
-          results: unique,
-          isSearching: false,
-          hasMore: results.length > 0,
-          page: 1
-        }));
-      } catch (e: any) {
-        if (cancelled || e?.name === 'AbortError') return;
-        setSearchState((prev) => ({
-          ...prev,
-          isSearching: false,
-          error: (e as Error).message || 'Ошибка поиска'
-        }));
-      }
-    };
 
-    const id = window.setTimeout(run, 180);
+    const timeoutId = setTimeout(() => {
+      const run = async () => {
+        setSearchState((prev) => ({ ...prev, isSearching: true, error: null, page: 1, results: [] }));
+        try {
+          const results = await searchTracks(query, 20, 1, mode, controller.signal);
+          const unique = results.filter(
+            (track, idx, arr) => arr.findIndex((t) => t.title === track.title && t.artist === track.artist) === idx
+          );
+          if (cancelled) return;
+          setSearchState((prev) => ({
+            ...prev,
+            results: unique,
+            isSearching: false,
+            hasMore: results.length > 0,
+            page: 1
+          }));
+        } catch (e: any) {
+          if (cancelled || e?.name === 'AbortError') return;
+          setSearchState((prev) => ({
+            ...prev,
+            isSearching: false,
+            error: (e as Error).message || 'Ошибка поиска'
+          }));
+        }
+      };
+      run();
+    }, 1000);
+
     return () => {
+      clearTimeout(timeoutId);
       cancelled = true;
       controller.abort();
-      clearTimeout(id);
     };
   }, [searchState.query, searchState.searchMode, setSearchState]);
 
@@ -775,7 +778,6 @@ const NewDesignApp: React.FC = () => {
                 }
                 placeholder="Искать..."
                 className="w-full bg-transparent text-lg p-4 uppercase placeholder-lebedev-gray/40 focus:outline-none text-lebedev-white font-bold tracking-wide rounded-none"
-                autoFocus
               />
             </div>
             <div className="flex bg-lebedev-black">
@@ -863,7 +865,10 @@ const NewDesignApp: React.FC = () => {
             <input
               type="text"
               value={searchState.query}
-              onChange={(e) => setSearchState((prev) => ({ ...prev, query: e.target.value }))}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearchState((prev) => ({ ...prev, query: val }));
+              }}
               placeholder="Искать..."
               className="w-full bg-transparent p-2 uppercase placeholder-lebedev-gray/40 focus:outline-none text-lebedev-white font-bold"
             />
@@ -1147,13 +1152,15 @@ const NewDesignApp: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 divide-y divide-lebedev-white/20 flex-1">
+      <div className="flex-1 overflow-y-auto">
         {libraryTracks.length === 0 ? (
           <div className="p-8 text-center text-lebedev-gray text-xl uppercase font-bold tracking-widest opacity-50">
             Пусто.
           </div>
         ) : (
-          libraryTracks.map((track, index) => renderTrackItem(track, index, libraryTracks))
+          <div className="divide-y divide-lebedev-white/10">
+            {libraryTracks.map((track, index) => renderTrackItem(track, index, libraryTracks))}
+          </div>
         )}
       </div>
     </div>
