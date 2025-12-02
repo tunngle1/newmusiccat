@@ -134,10 +134,10 @@ class HitmoParser:
                         print(f"Error parsing track: {e}")
                         continue
                 
-                # 2. Fetch iTunes covers in parallel
+                # 2. Fetch covers (Deezer -> iTunes) in parallel
                 tasks = []
                 for track in tracks_data:
-                    tasks.append(self._get_itunes_cover(client, track['artist'], track['title']))
+                    tasks.append(self._get_best_cover(client, track['artist'], track['title']))
                 
                 covers = await asyncio.gather(*tasks)
                 
@@ -160,6 +160,23 @@ class HitmoParser:
             print(f"Search error: {e}")
             return []
 
+    async def _get_deezer_cover(self, client: httpx.AsyncClient, artist: str, title: str) -> Optional[str]:
+        """
+        Get high quality cover from Deezer API
+        """
+        try:
+            query = f'artist:"{artist}" track:"{title}"'
+            resp = await client.get("https://api.deezer.com/search", params={"q": query, "limit": 1})
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            if data.get("data"):
+                album = data["data"][0].get("album", {})
+                return album.get("cover_xl") or album.get("cover_big") or album.get("cover_medium")
+            return None
+        except:
+            return None
+
     async def _get_itunes_cover(self, client: httpx.AsyncClient, artist: str, title: str) -> Optional[str]:
         """
         Get high quality cover from iTunes API (Async)
@@ -181,10 +198,19 @@ class HitmoParser:
                 if data['resultCount'] > 0:
                     artwork = data['results'][0].get('artworkUrl100')
                     if artwork:
-                        return re.sub(r'\d+x\d+bb', '600x600bb', artwork)
+                        return re.sub(r'\d+x\d+bb', '1000x1000bb', artwork)
             return None
         except:
             return None
+
+    async def _get_best_cover(self, client: httpx.AsyncClient, artist: str, title: str) -> Optional[str]:
+        """
+        Try Deezer first, then iTunes
+        """
+        cover = await self._get_deezer_cover(client, artist, title)
+        if cover:
+            return cover
+        return await self._get_itunes_cover(client, artist, title)
     
     async def get_genre_tracks(self, genre_id: int, limit: int = 20, page: int = 1, user_agent: Optional[str] = None) -> List[Dict]:
         """
@@ -273,7 +299,7 @@ class HitmoParser:
                 # Fetch covers in parallel
                 tasks = []
                 for track in tracks_data:
-                    tasks.append(self._get_itunes_cover(client, track['artist'], track['title']))
+                    tasks.append(self._get_best_cover(client, track['artist'], track['title']))
                 
                 covers = await asyncio.gather(*tasks)
                 

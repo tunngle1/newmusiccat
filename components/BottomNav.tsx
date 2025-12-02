@@ -8,10 +8,15 @@ interface BottomNavProps {
 }
 
 const BottomNav: React.FC<BottomNavProps> = ({ currentView, onNavigate }) => {
-  const getItemClass = (view: ViewState) => `flex flex-col items-center justify-center space-y-1 w-full h-full ${currentView === view ? 'text-blue-500' : 'text-gray-400 hover:text-white'} transition-colors`;
+  const getItemClass = (view: ViewState) =>
+    `flex flex-col items-center justify-center space-y-1 w-full h-full rounded-xl transition-all ${
+      currentView === view
+        ? 'bg-white text-black shadow-lg scale-[1.03]'
+        : 'text-gray-300 hover:text-white'
+    }`;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-16 bg-black/90 backdrop-blur-md border-t border-white/10 flex justify-between items-center px-6 z-40 pb-safe">
+    <div className="fixed bottom-0 left-0 right-0 h-16 bg-[#0c0c12] border-t border-white/15 shadow-[0_-10px_30px_rgba(0,0,0,0.45)] flex justify-between items-center px-6 z-40 pb-safe">
       <button className={getItemClass(ViewState.HOME)} onClick={() => onNavigate(ViewState.HOME)}>
         <Home size={24} />
         <span className="text-[10px] font-medium">Главная</span>

@@ -86,15 +86,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const getBackgroundClass = (type: Notification['type']) => {
         switch (type) {
             case 'success':
-                return 'bg-green-500/20 border-green-500/30';
+                return 'bg-green-600 border-green-700 text-white';
             case 'error':
-                return 'bg-red-500/20 border-red-500/30';
+                return 'bg-red-600 border-red-700 text-white';
             case 'referral':
-                return 'bg-purple-500/20 border-purple-500/30';
+                return 'bg-purple-600 border-purple-700 text-white';
             case 'premium':
-                return 'bg-yellow-500/20 border-yellow-500/30';
+                return 'bg-yellow-500 border-yellow-600 text-black';
             default:
-                return 'bg-blue-500/20 border-blue-500/30';
+                return 'bg-blue-600 border-blue-700 text-white';
         }
     };
 
@@ -112,18 +112,21 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 {notifications.map(notification => (
                     <div
                         key={notification.id}
-                        className={`glass-panel border ${getBackgroundClass(notification.type)} p-4 rounded-xl shadow-lg animate-slide-in-right cursor-pointer`}
+                        className={`border ${getBackgroundClass(notification.type)} p-4 rounded-xl shadow-lg animate-slide-in-right cursor-pointer`}
                         onClick={() => removeNotification(notification.id)}
                     >
                         <div className="flex items-start gap-3">
                             <div className="flex-shrink-0 mt-0.5">
                                 {getIcon(notification.type)}
                             </div>
+                            {/*
+                              text colors come from wrapper (getBackgroundClass); enforce inner text to inherit
+                            */}
                             <div className="flex-1 min-w-0">
-                                <h4 className="text-white font-bold text-sm mb-1">
+                                <h4 className="font-bold text-sm mb-1" style={{ color: 'inherit' }}>
                                     {notification.title}
                                 </h4>
-                                <p className="text-white/80 text-xs">
+                                <p className="text-xs" style={{ color: 'inherit' }}>
                                     {notification.message}
                                 </p>
                             </div>

@@ -68,8 +68,53 @@ export enum ViewState {
   LIBRARY = 'library',
   PLAYLIST_DETAILS = 'PLAYLIST_DETAILS',
   ADMIN = 'admin',
-  REFERRAL = 'referral'
+  REFERRAL = 'referral',
+  SUBSCRIPTION = 'subscription'
 }
 
 export type RepeatMode = 'none' | 'all' | 'one';
 export type SearchMode = 'all' | 'artist' | 'track';
+
+// --- Admin Interfaces ---
+
+export interface UserStats {
+  total_users: number;
+  premium_users: number;
+  admin_users: number;
+  new_users_today: number;
+  total_revenue_ton: number;
+  total_revenue_stars: number;
+  total_revenue_rub: number;
+}
+
+export interface ActivityStat {
+  date: string;
+  count: number;
+}
+
+export interface UserListItem {
+  id: number;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  is_admin: boolean;
+  is_premium: boolean;
+  is_blocked: boolean;
+}
+
+export interface UserListResponse {
+  users: UserListItem[];
+}
+
+export interface BroadcastRequest {
+  message: string;
+}
+
+export interface GrantRequest {
+  user_id: number;
+  is_admin?: boolean;
+  is_premium?: boolean;
+  is_blocked?: boolean;
+  trial_days?: number;
+  premium_days?: number;
+}

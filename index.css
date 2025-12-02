@@ -59,6 +59,19 @@ body {
   transform: scale(0.98);
 }
 
+/* Mini player solid state while playing */
+.mini-player-opaque {
+  background: linear-gradient(180deg, #0f1016 0%, #0b0c10 100%);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.mini-player-base {
+  background: #0c0c12;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+
 /* Text Effects */
 .text-glow {
   text-shadow: 0 0 20px var(--primary-glow);
@@ -169,6 +182,80 @@ body {
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+.loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.loading-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #ef4444;
+  animation: pulse-dot 0.9s infinite ease-in-out;
+}
+
+.loading-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.loading-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes pulse-dot {
+  0% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.4);
+  }
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+}
+
+.loading-dots-bounce {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.loading-dots-bounce .loading-dot {
+  animation: bounce-dot 0.9s infinite ease-in-out;
+}
+
+.loading-dots-bounce .loading-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.loading-dots-bounce .loading-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes bounce-dot {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(-6px) scale(1.2);
+    opacity: 1;
+  }
 }
 
 /* Safe Area Utilities */

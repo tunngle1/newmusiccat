@@ -21,28 +21,33 @@ const ArtistSelectorModal: React.FC<ArtistSelectorModalProps> = ({
             onClick={onClose}
         >
             <div
-                className="bg-gray-900 w-full max-w-sm p-6 rounded-t-2xl border-t border-white/10 shadow-2xl animate-slide-up"
+                className="w-full max-w-md border-2 border-lebedev-white bg-lebedev-black text-lebedev-white shadow-[0_-16px_40px_rgba(0,0,0,0.6)] animate-slide-up p-6"
                 onClick={e => e.stopPropagation()}
             >
-                <h3 className="text-lg font-bold mb-4 text-white">Выберите артиста</h3>
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-black uppercase tracking-wider">Выберите артиста</h3>
+                    <button className="text-lebedev-gray hover:text-lebedev-red transition-colors" onClick={onClose}>
+                        ✕
+                    </button>
+                </div>
 
-                <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar">
+                <div className="max-h-80 overflow-y-auto scrollbar-hidden divide-y divide-lebedev-white/20">
                     {artists.map((artist, index) => (
                         <button
                             key={index}
-                            className="w-full p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left border border-white/10"
+                            className="w-full p-4 text-left hover:bg-lebedev-white/10 transition-all"
                             onClick={() => {
                                 onSelectArtist(artist);
                                 onClose();
                             }}
                         >
-                            <span className="text-white font-medium">{artist}</span>
+                            <span className="text-lebedev-white font-bold uppercase tracking-wider">{artist}</span>
                         </button>
                     ))}
                 </div>
 
                 <button
-                    className="w-full mt-4 py-3 bg-gray-800 rounded-xl font-medium text-gray-300 hover:bg-gray-700 transition-colors"
+                    className="w-full mt-4 py-3 border border-lebedev-white font-bold uppercase tracking-widest text-lebedev-white hover:bg-lebedev-white hover:text-lebedev-black transition-colors"
                     onClick={onClose}
                 >
                     Отмена

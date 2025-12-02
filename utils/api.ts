@@ -28,7 +28,8 @@ export const searchTracks = async (
     query: string,
     limit: number = 20,
     page: number = 1,
-    searchMode: SearchMode = 'all'
+    searchMode: SearchMode = 'all',
+    signal?: AbortSignal
 ): Promise<Track[]> => {
     try {
         const url = new URL(`${API_BASE_URL}/api/search`);
@@ -36,16 +37,11 @@ export const searchTracks = async (
         url.searchParams.append('limit', limit.toString());
         url.searchParams.append('page', page.toString());
 
-        if (searchMode === 'artist') {
-            url.searchParams.append('by_artist', 'true');
-        } else if (searchMode === 'track') {
-            url.searchParams.append('by_track', 'true');
-        }
-
         const response = await fetch(url.toString(), {
             headers: {
                 'tuna-skip-browser-warning': 'true'
-            }
+            },
+            signal
         });
 
         if (!response.ok) {
@@ -56,7 +52,7 @@ export const searchTracks = async (
         const data: SearchResponse = await response.json();
 
         // Преобразуем данные в формат Track
-        return data.results.map(track => {
+        const mapped = data.results.map(track => {
             let audioUrl = (track as any).url;
             // Если URL относительный (начинается с /), добавляем базовый URL API
             if (audioUrl && audioUrl.startsWith('/')) {
@@ -78,6 +74,18 @@ export const searchTracks = async (
                 isLocal: false
             };
         });
+
+        // Локальная фильтрация по артисту/треку, чтобы не триггерить глубокий поиск на бэкенде
+        if (searchMode === 'artist') {
+            const q = query.toLowerCase();
+            return mapped.filter(t => t.artist?.toLowerCase().includes(q));
+        }
+        if (searchMode === 'track') {
+            const q = query.toLowerCase();
+            return mapped.filter(t => t.title?.toLowerCase().includes(q));
+        }
+
+        return mapped;
     } catch (error) {
         console.error('Search error:', error);
         throw error;
