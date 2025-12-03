@@ -1219,9 +1219,13 @@ async def stream_audio_proxy(request: Request, url: str = Query(..., description
         'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
     }
     
+    print(f"[STREAM] Checking URL for Hitmo: {url}")
     if "hitmotop.com" in url:
         headers['Referer'] = 'https://rus.hitmotop.com/'
         headers['Origin'] = 'https://rus.hitmotop.com'
+        print(f"[STREAM] ✓ Added Hitmo headers (Referer, Origin)")
+    else:
+        print(f"[STREAM] ✗ URL is not from Hitmo, skipping special headers")
     
     range_header = request.headers.get("range")
     if range_header:
