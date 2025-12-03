@@ -665,9 +665,9 @@ const NewDesignApp: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0 min-w-[160px]">
+        <div className="flex items-center gap-3 shrink-0">
           <div className="w-6 flex justify-center">{isActive ? <Visualizer isPlaying={isPlaying} /> : null}</div>
-          <div className="flex items-center gap-2 justify-end min-w-[200px] flex-wrap">
+          <div className="flex items-center gap-2 justify-end flex-wrap">
             {!inPlaylist && activeTab !== ViewState.FAVORITES && (
               <button
                 onClick={(e) => {
