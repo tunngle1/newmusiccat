@@ -2208,6 +2208,65 @@ async def complete_payment(
     }
 
 
+@app.post("/api/admin/promocodes")
+async def create_promo_code(request: PromoCodeCreate, user_id: int = Query(...), db: Session = Depends(get_db)):
+    """Создание промокода (только для админов)"""
+    # Проверка прав администратора
+    admin = db.query(User).filter(User.id == user_id).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Проверка на существование промокода
+    existing = db.query(PromoCode).filter(PromoCode.code == request.code).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Promo code already exists")
+    
+    # Создание промокода
+    promo = PromoCode(
+        code=request.code.upper(),
+        discount_type=request.discount_type,
+        value=request.value,
+        max_uses=request.max_uses if request.max_uses else 0,
+        tribute_link_month=request.tribute_link_month if hasattr(request, 'tribute_link_month') else None,
+        tribute_link_year=request.tribute_link_year if hasattr(request, 'tribute_link_year') else None,
+        is_active=True
+    )
+    
+    db.add(promo)
+    db.commit()
+    db.refresh(promo)
+    
+    return {"status": "ok", "promo_code": promo.code}
+
+
+@app.get("/api/admin/promocodes")
+async def get_promo_codes(user_id: int = Query(...), db: Session = Depends(get_db)):
+    """Получение списка промокодов (только для админов)"""
+    # Проверка прав администратора
+    admin = db.query(User).filter(User.id == user_id).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    promos = db.query(PromoCode).order_by(PromoCode.created_at.desc()).all()
+    return promos
+
+
+@app.delete("/api/admin/promocodes/{promo_id}")
+async def delete_promo_code(promo_id: int, user_id: int = Query(...), db: Session = Depends(get_db)):
+    """Удаление промокода (только для админов)"""
+    # Проверка прав администратора
+    admin = db.query(User).filter(User.id == user_id).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    promo = db.query(PromoCode).filter(PromoCode.id == promo_id).first()
+    if not promo:
+        raise HTTPException(status_code=404, detail="Promo code not found")
+    
+    db.delete(promo)
+    db.commit()
+    
+    return {"status": "ok"}
 @app.on_event("shutdown")
 async def shutdown_event():
     """Закрытие ресурсов при остановке приложения"""
