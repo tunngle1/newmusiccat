@@ -146,6 +146,12 @@ class LyricsService:
                 print("❌ No URL in first result")
                 return None
             
+            # Fix relative URLs from DuckDuckGo
+            if first_result_url.startswith('//'):
+                first_result_url = 'https:' + first_result_url
+            elif not first_result_url.startswith('http'):
+                first_result_url = 'https://' + first_result_url
+            
             print(f"Found result: {first_result_url[:100]}...")
             
             # Try to fetch and parse lyrics from the page

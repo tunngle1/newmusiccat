@@ -68,7 +68,7 @@ class HitmoParser:
             
             async with httpx.AsyncClient(
                 headers=headers, 
-                timeout=10.0,
+                timeout=30.0,  # Increased timeout for slow Hitmo responses
                 proxies=proxies
             ) as client:
                 response = await client.get(self.SEARCH_URL, params=params)
@@ -206,6 +206,8 @@ class HitmoParser:
                 
         except Exception as e:
             print(f"Search error: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     async def _get_deezer_cover(self, client: httpx.AsyncClient, artist: str, title: str) -> Optional[str]:
@@ -279,7 +281,7 @@ class HitmoParser:
             
             async with httpx.AsyncClient(
                 headers=headers, 
-                timeout=10.0, 
+                timeout=30.0,  # Increased timeout for slow Hitmo responses
                 follow_redirects=True,
                 proxies=proxies
             ) as client:
@@ -367,6 +369,8 @@ class HitmoParser:
                 
         except Exception as e:
             print(f"Genre tracks error: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def get_radio_stations(self) -> List[Dict]:
