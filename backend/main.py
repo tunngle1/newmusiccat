@@ -1261,6 +1261,16 @@ async def stream_audio_proxy(request: Request, url: str = Query(..., description
         if "content-type" in r.headers:
             response_headers["Content-Type"] = r.headers["content-type"]
             
+        # Если запрошено скачивание, добавляем заголовок Content-Disposition
+        download_param = request.query_params.get("download")
+        if download_param and download_param.lower() == "true":
+            filename = url.split("/")[-1] or "track.mp3"
+            # Очистка имени файла от параметров URL
+            if "?" in filename:
+                filename = filename.split("?")[0]
+            response_headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+            print(f"[STREAM] Force download mode: {filename}")
+            
         return StreamingResponse(
             r.aiter_bytes(),
             status_code=r.status_code,

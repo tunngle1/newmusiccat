@@ -899,7 +899,22 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           clearInterval(progressInterval);
         }
       } else {
-        audioResponse = await fetch(track.audioUrl);
+        // Для остальных треков (включая Hitmo) используем прокси
+        let downloadUrl = track.audioUrl;
+
+        // Если URL с Hitmo или уже использует /api/stream, используем прокси
+        if (track.audioUrl.includes('hitmotop.com') || track.audioUrl.startsWith('/api/stream')) {
+          // Если уже использует /api/stream, используем как есть, но добавляем download=true
+          if (track.audioUrl.startsWith('/api/stream')) {
+            downloadUrl = `${API_BASE_URL}${track.audioUrl}${track.audioUrl.includes('?') ? '&' : '?'}download=true`;
+          } else {
+            // Иначе оборачиваем в прокси с download=true
+            downloadUrl = `${API_BASE_URL}/api/stream?url=${encodeURIComponent(track.audioUrl)}&download=true`;
+          }
+          console.log("Using proxy for download:", downloadUrl);
+        }
+
+        audioResponse = await fetch(downloadUrl);
       }
 
       if (!audioResponse.ok) throw new Error('Audio download failed');
@@ -928,6 +943,13 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }
 
       const contentType = audioResponse.headers.get('content-type') || 'audio/mpeg';
+
+      // Проверка на HTML (ошибка прокси или бэкенда)
+      if (contentType.includes('text/html') || contentType.includes('application/json')) {
+        console.error("Received non-audio content type:", contentType);
+        throw new Error('Invalid content type: ' + contentType);
+      }
+
       let audioBlob: Blob;
       try {
         audioBlob = new Blob(chunks as BlobPart[], { type: contentType });
@@ -1014,7 +1036,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const processDownloadToChat = async (track: Track) => {
     console.log('[DOWNLOAD_TO_CHAT] Starting download for track:', track.title);
-    
+
     try {
       setIsDownloadingToChat(track.id);
 
