@@ -1335,9 +1335,22 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
         
         print(f"[DOWNLOAD_TO_CHAT] Downloading audio from: {audio_url[:100]}...")
         
+        # Подготовка заголовков для скачивания
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+        }
+        
+        # Для Hitmo добавляем специальные заголовки
+        if "hitmotop.com" in audio_url:
+            headers['Referer'] = 'https://rus.hitmotop.com/'
+            headers['Origin'] = 'https://rus.hitmotop.com'
+            print(f"[DOWNLOAD_TO_CHAT] Added Hitmo headers")
+        
         # 1. Download audio file from URL (увеличен timeout для больших файлов)
         async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-            audio_response = await client.get(audio_url)
+            audio_response = await client.get(audio_url, headers=headers)
             audio_response.raise_for_status()
             audio_data = audio_response.content
         
@@ -1359,9 +1372,21 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
                 if cover_url.startswith('/api/'):
                     cover_url = f"http://localhost:8000{cover_url}"
                 
+                # Подготовка заголовков для обложки
+                cover_headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                    'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+                }
+                
+                # Для Hitmo добавляем специальные заголовки
+                if "hitmotop.com" in cover_url:
+                    cover_headers['Referer'] = 'https://rus.hitmotop.com/'
+                    cover_headers['Origin'] = 'https://rus.hitmotop.com'
+                
                 print(f"[DOWNLOAD_TO_CHAT] Downloading thumbnail from: {cover_url[:100]}...")
                 async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as thumb_client:
-                    thumb_response = await thumb_client.get(cover_url)
+                    thumb_response = await thumb_client.get(cover_url, headers=cover_headers)
                     if thumb_response.status_code == 200:
                         thumbnail_data = thumb_response.content
                         files['thumbnail'] = ('thumb.jpg', thumbnail_data, 'image/jpeg')
