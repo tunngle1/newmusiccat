@@ -156,6 +156,7 @@ const NewDesignApp: React.FC = () => {
   const [radioStations, setRadioStations] = useState<any[]>([]);
   const [radioLoading, setRadioLoading] = useState(false);
   const [radioError, setRadioError] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Restore YouTube state variables
   const [youtubeLink, setYoutubeLink] = useState('');
@@ -435,6 +436,16 @@ const NewDesignApp: React.FC = () => {
       controller.abort();
     };
   }, [searchState.query, searchState.searchMode, setSearchState]);
+
+  // Keep focus on the search input when typing, even after re-render
+  useEffect(() => {
+    if (searchState.query && searchInputRef.current) {
+      const input = searchInputRef.current;
+      input.focus({ preventScroll: true });
+      const len = searchState.query.length;
+      input.setSelectionRange?.(len, len);
+    }
+  }, [searchState.query, searchState.searchMode]);
 
   const handleTrackSelect = (track: Track, queue?: Track[]) => {
     playTrack(track, queue || allTracksSafe);
@@ -780,6 +791,7 @@ const NewDesignApp: React.FC = () => {
               </div>
               <input
                 type="text"
+                ref={searchInputRef}
                 value={searchState.query}
                 onChange={(e) =>
                   setSearchState((prev) => ({
@@ -878,6 +890,7 @@ const NewDesignApp: React.FC = () => {
             <SearchIcon className="w-5 h-5 text-lebedev-gray ml-2" />
             <input
               type="text"
+              ref={searchInputRef}
               value={searchState.query}
               onChange={(e) => {
                 const val = e.target.value;

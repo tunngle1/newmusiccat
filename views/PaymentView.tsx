@@ -36,8 +36,6 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
         code: string;
         discount_type: string;
         value: number;
-        tribute_link_month: string | null;
-        tribute_link_year: string | null;
     } | null>(null);
     const [promoMessage, setPromoMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
@@ -56,9 +54,7 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
                 setAppliedPromo({
                     code: promoCode,
                     discount_type: data.discount_type,
-                    value: data.value,
-                    tribute_link_month: data.tribute_link_month,
-                    tribute_link_year: data.tribute_link_year
+                    value: data.value
                 });
                 setPromoMessage({ type: 'success', text: data.message });
             } else {
@@ -74,49 +70,65 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
     const getDiscountedPrice = (originalPrice: number) => {
         if (!appliedPromo) return originalPrice;
         if (appliedPromo.discount_type === 'percent') {
-            return originalPrice * (1 - appliedPromo.value / 100);
+            return Math.round(originalPrice * (1 - appliedPromo.value / 100));
         } else if (appliedPromo.discount_type === 'fixed') {
-            return Math.max(0, originalPrice - appliedPromo.value);
+            return Math.max(0, Math.round(originalPrice - appliedPromo.value));
         }
         return originalPrice;
     };
 
-    const handleTributePayment = async () => {
+
+    const handleStarsPayment = async () => {
+        if (!user) return;
+
         setIsLoading(true);
         try {
-            // Получаем конфигурацию платежей с бэкенда
-            const configResponse = await fetch(`${API_BASE_URL}/api/payment/config`);
-            if (!configResponse.ok) {
-                throw new Error('Failed to fetch payment config');
+            const finalPrice = getDiscountedPrice(selectedPlan.priceStars);
+
+            // Создаем invoice для оплаты звездами
+            const response = await fetch(`${API_BASE_URL}/api/payment/create-stars-invoice`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: user.id,
+                    plan_id: selectedPlan.id,
+                    promo_code: appliedPromo?.code || null,
+                    amount: finalPrice
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to create invoice');
             }
-            const config = await configResponse.json();
 
-            // Выбираем ссылку: если есть промокод и для этого плана есть спец. ссылка - берем её
-            let link = selectedPlan.id === 'month' ? config.tribute_link_month : config.tribute_link_year;
+            const { invoice_link } = await response.json();
 
-            if (appliedPromo) {
-                if (selectedPlan.id === 'month' && appliedPromo.tribute_link_month) {
-                    link = appliedPromo.tribute_link_month;
-                } else if (selectedPlan.id === 'year' && appliedPromo.tribute_link_year) {
-                    link = appliedPromo.tribute_link_year;
-                }
-            }
-
-            if (link) {
-                // Открываем Tribute Mini App
-                (window.Telegram.WebApp as any).openTelegramLink(link);
-                onClose(); // Закрываем окно оплаты, так как пользователь перейдет в Tribute
+            // Открываем invoice через Telegram WebApp API
+            if (window.Telegram?.WebApp?.openInvoice) {
+                window.Telegram.WebApp.openInvoice(invoice_link, (status: string) => {
+                    if (status === 'paid') {
+                        window.Telegram.WebApp.showAlert('Оплата прошла успешно! Премиум активирован.');
+                        onClose();
+                        // Перезагрузить страницу для обновления статуса
+                        window.location.reload();
+                    } else if (status === 'cancelled') {
+                        window.Telegram.WebApp.showAlert('Оплата отменена');
+                    } else if (status === 'failed') {
+                        window.Telegram.WebApp.showAlert('Ошибка оплаты. Попробуйте снова.');
+                    }
+                });
             } else {
-                window.Telegram.WebApp.showAlert('Ссылка на оплату не настроена. Пожалуйста, свяжитесь с поддержкой.');
+                window.Telegram.WebApp.showAlert('Ваша версия Telegram не поддерживает оплату звездами');
             }
 
         } catch (error) {
-            console.error('Tribute Payment error:', error);
-            window.Telegram.WebApp.showAlert('Ошибка при получении ссылки на оплату.');
+            console.error('Stars Payment error:', error);
+            window.Telegram.WebApp.showAlert('Ошибка при создании счета на оплату.');
         } finally {
             setIsLoading(false);
         }
     };
+
 
     return (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
@@ -195,17 +207,23 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
                 {/* Кнопки оплаты */}
                 <div className="space-y-3 pt-2">
                     <button
-                        onClick={handleTributePayment}
+                        onClick={handleStarsPayment}
                         disabled={isLoading}
-                        className="w-full py-4 bg-[#0098EA] hover:bg-[#0088D0] text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
+                        className="w-full py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
                     >
-                        <CreditCard size={20} />
-                        Оплатить {getDiscountedPrice(selectedPlan.priceTon * 100).toFixed(0)}₽ (Карта / СБП)
-                        {appliedPromo && <span className="text-xs line-through opacity-70 ml-1">{selectedPlan.priceTon * 100}₽</span>}
+                        {isLoading ? (
+                            <Loader size={20} className="animate-spin" />
+                        ) : (
+                            <>
+                                <Star size={20} fill="currentColor" />
+                                Оплатить {getDiscountedPrice(selectedPlan.priceStars)} ⭐
+                                {appliedPromo && <span className="text-xs line-through opacity-70 ml-1">{selectedPlan.priceStars}⭐</span>}
+                            </>
+                        )}
                     </button>
 
                     <p className="text-center text-xs text-gray-500 mt-2">
-                        Оплата происходит через сервис Tribute.tg
+                        Оплата через Telegram Stars
                     </p>
                 </div>
 

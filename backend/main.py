@@ -10,6 +10,7 @@ from typing import List, Optional, Dict, Any
 import uvicorn
 from sqlalchemy.orm import Session
 from datetime import datetime
+from database import PromoCode
 
 try:
     from backend.hitmo_parser_light import HitmoParser
@@ -783,7 +784,60 @@ async def verify_ton_payment(request: TonVerificationRequest, db: Session = Depe
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
+class CreateStarsInvoiceRequest(BaseModel):
+    user_id: int
+    plan_id: str
+    promo_code: Optional[str] = None
+    amount: int
+@app.post("/api/payment/create-stars-invoice")
+async def create_stars_invoice_with_promo(request: CreateStarsInvoiceRequest, db: Session = Depends(get_db)):
+    """Создание invoice для оплаты Telegram Stars с поддержкой промокодов"""
+    try:
+        # Проверяем промокод если указан
+        final_amount = request.amount
+        if request.promo_code:
+            promo = db.query(PromoCode).filter(
+                PromoCode.code == request.promo_code,
+                PromoCode.is_active == True
+            ).first()
+            
+            if promo:
+                if promo.discount_type == 'percent':
+                    final_amount = int(request.amount * (1 - promo.value / 100))
+                elif promo.discount_type == 'fixed':
+                    final_amount = max(0, int(request.amount - promo.value))
+        
+        # Создаем invoice через Telegram Bot API
+        BOT_TOKEN = os.getenv("BOT_TOKEN")
+        telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/createInvoiceLink"
+        
+        # Определяем название и описание по плану
+        title = "Premium подписка (1 месяц)" if request.plan_id == "month" else "Premium подписка (1 год)"
+        description = "Безлимитное скачивание музыки и доступ к эксклюзивным функциям"
+        
+        payload = {
+            "title": title,
+            "description": description,
+            "payload": f"{request.user_id}:{request.plan_id}:{request.promo_code or 'none'}",
+            "currency": "XTR",  # Telegram Stars
+            "prices": [{"label": "Premium", "amount": final_amount}]
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(telegram_url, json=payload)
+            data = response.json()
+            
+            if not data.get("ok"):
+                raise HTTPException(status_code=500, detail=data.get("description", "Failed to create invoice"))
+            
+            return {
+                "status": "ok",
+                "invoice_link": data["result"]
+            }
+            
+    except Exception as e:
+        print(f"Error creating Stars invoice: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 @app.post("/api/webhook/telegram")
 async def telegram_webhook(update: Dict[str, Any] = Body(...), db: Session = Depends(get_db)):
     """Вебхук для обработки обновлений от Telegram (включая оплату Stars)"""
