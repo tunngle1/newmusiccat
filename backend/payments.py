@@ -108,6 +108,7 @@ def verify_yoomoney_notification(data: dict) -> bool:
 def grant_premium_after_payment(db: Session, user_id: int, plan: str, payment_method: str, amount: float = 0):
     """
     Выдает премиум и сохраняет запись о платеже.
+    Также выдает премиум пригласившему при первой оплате реферала.
     """
     try:
         print(f"DEBUG: Starting grant_premium_after_payment for {user_id}")
@@ -156,6 +157,49 @@ def grant_premium_after_payment(db: Session, user_id: int, plan: str, payment_me
         
         db.commit()
         print(f"✅ Premium granted to {user_id} ({plan}) via {payment_method}")
+        
+        # РЕФЕРАЛЬНАЯ СИСТЕМА: Проверяем, есть ли реферал
+        try:
+            from database import Referral
+        except ImportError:
+            from backend.database import Referral
+            
+        referral = db.query(Referral).filter(
+            Referral.referred_id == user_id,
+            Referral.reward_given == False
+        ).first()
+        
+        if referral:
+            print(f"🎁 Found referral: {referral.referrer_id} invited {user_id}")
+            
+            # Выдаем премиум пригласившему
+            referrer = db.query(User).filter(User.id == referral.referrer_id).first()
+            
+            if referrer:
+                # Суммируем премиум
+                if referrer.premium_expires_at and referrer.premium_expires_at > now:
+                    referrer.premium_expires_at += timedelta(days=days)
+                else:
+                    referrer.premium_expires_at = now + timedelta(days=days)
+                
+                referrer.is_premium = True
+                
+                # Обновляем статус реферала
+                referral.status = 'completed'
+                referral.reward_given = True
+                referral.completed_at = now
+                
+                db.commit()
+                print(f"✅ Referral reward granted to {referral.referrer_id} ({plan})")
+                
+                # Возвращаем данные для отправки уведомления
+                return {
+                    'success': True,
+                    'referrer_id': referral.referrer_id,
+                    'referrer_username': referrer.username,
+                    'plan': plan
+                }
+        
         return True
     except Exception as e:
         print(f"❌ Error granting premium: {e}")

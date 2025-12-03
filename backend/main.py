@@ -74,6 +74,7 @@ class UserAuth(BaseModel):
     last_name: Optional[str] = None
     auth_date: Optional[int] = 0
     hash: Optional[str] = ""
+    referrer_id: Optional[int] = None  # ID пригласившего пользователя
 
 class UserStats(BaseModel):
     total_users: int
@@ -323,6 +324,49 @@ async def auth_user(user_data: UserAuth, db: Session = Depends(get_db)):
         )
         db.add(user)
         db.commit()
+        
+        # РЕФЕРАЛЬНАЯ СИСТЕМА: Обработка реферальной ссылки
+        if hasattr(user_data, 'referrer_id') and user_data.referrer_id:
+            try:
+                # Проверяем, что пригласивший существует
+                referrer = db.query(User).filter(User.id == user_data.referrer_id).first()
+                
+                if referrer and referrer.id != user.id:  # Нельзя пригласить самого себя
+                    # Проверяем, нет ли уже реферальной записи
+                    existing_referral = db.query(Referral).filter(
+                        Referral.referred_id == user.id
+                    ).first()
+                    
+                    if not existing_referral:
+                        # Создаём реферальную запись
+                        referral = Referral(
+                            referrer_id=referrer.id,
+                            referred_id=user.id,
+                            status='pending',
+                            reward_given=False
+                        )
+                        db.add(referral)
+                        db.commit()
+                        
+                        print(f"✅ Referral created: {referrer.id} invited {user.id}")
+                        
+                        # Отправляем уведомление пригласившему
+                        try:
+                            if BOT_TOKEN:
+                                telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+                                username = user.username or user.first_name or "пользователь"
+                                message_text = f"👥 Новый реферал!\n\n✅ @{username} присоединился по вашей ссылке\n🎁 Когда он оплатит Premium, вы получите такую же подписку!"
+                                
+                                async with httpx.AsyncClient() as client:
+                                    await client.post(telegram_url, json={
+                                        'chat_id': referrer.id,
+                                        'text': message_text
+                                    })
+                                print(f"📨 Referral notification sent to {referrer.id}")
+                        except Exception as e:
+                            print(f"❌ Failed to send referral notification: {e}")
+            except Exception as e:
+                print(f"❌ Error processing referral: {e}")
     
     # Обновляем данные если изменились
     if user.username != user_data.username or \
@@ -962,12 +1006,10 @@ async def yoomoney_webhook(request: Request, db: Session = Depends(get_db)):
             print(f"✅ YooMoney payment verified: user={user_id} plan={plan} amount={amount}")
             
             # Выдаем премиум
-            success = grant_premium_after_payment(db, user_id, plan, "yoomoney_p2p", amount)
+            result = grant_premium_after_payment(db, user_id, plan, "yoomoney_p2p", amount)
             
-            if success:
-                print(f"✅ Premium granted to {user_id}")
-                
-                # Отправляем уведомление пользователю в Telegram
+            if result:
+                # Отправляем уведомление пользователю
                 try:
                     if BOT_TOKEN:
                         telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -980,8 +1022,24 @@ async def yoomoney_webhook(request: Request, db: Session = Depends(get_db)):
                                 'text': message_text
                             })
                         print(f"📨 Notification sent to user {user_id}")
+                        
+                        # Если есть реферальная награда - отправляем уведомление пригласившему
+                        if isinstance(result, dict) and result.get('success') and result.get('referrer_id'):
+                            referrer_id = result['referrer_id']
+                            referrer_username = result.get('referrer_username', 'пользователь')
+                            plan_text_ref = "1 месяц" if result['plan'] == "month" else "1 год"
+                            
+                            referrer_message = f"🎁 Ваш реферал оплатил Premium!\n\n✅ Вам начислен Premium на {plan_text_ref}\n👤 Реферал: @{referrer_username}\n\nСпасибо за приглашение друзей!"
+                            
+                            await client.post(telegram_url, json={
+                                'chat_id': referrer_id,
+                                'text': referrer_message
+                            })
+                            print(f"📨 Referral reward notification sent to {referrer_id}")
                 except Exception as e:
                     print(f"❌ Failed to send notification: {e}")
+                    
+                print(f"✅ Premium granted to {user_id}")
             else:
                 print(f"❌ Failed to grant premium to {user_id}")
         else:
@@ -2346,6 +2404,35 @@ async def delete_promo_code(promo_id: int, user_id: int = Query(...), db: Sessio
     db.commit()
     
     return {"status": "ok"}
+
+
+@app.delete("/api/admin/user/{user_id}")
+async def delete_user(user_id: int, admin_id: int = Query(...), db: Session = Depends(get_db)):
+    """Удаление пользователя из БД (для тестирования)"""
+    # Проверка прав администратора
+    admin = db.query(User).filter(User.id == admin_id).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Находим пользователя
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Удаляем связанные данные
+    db.query(Payment).filter(Payment.user_id == user_id).delete()
+    db.query(DownloadedMessage).filter(DownloadedMessage.user_id == user_id).delete()
+    db.query(Referral).filter(
+        (Referral.referrer_id == user_id) | (Referral.referred_id == user_id)
+    ).delete()
+    
+    # Удаляем пользователя
+    db.delete(user)
+    db.commit()
+    
+    return {"status": "ok", "message": f"User {user_id} deleted"}
+
+
 @app.on_event("shutdown")
 async def shutdown_event():
     """Закрытие ресурсов при остановке приложения"""
