@@ -307,7 +307,10 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               first_name: tgUser.first_name,
               last_name: tgUser.last_name,
               auth_date: window.Telegram.WebApp.initDataUnsafe.auth_date || 0,
-              hash: window.Telegram.WebApp.initDataUnsafe.hash || ""
+              hash: window.Telegram.WebApp.initDataUnsafe.hash || "",
+              referrer_id: window.Telegram.WebApp.initDataUnsafe.start_param?.startsWith('ref_')
+                ? parseInt(window.Telegram.WebApp.initDataUnsafe.start_param.replace('ref_', ''))
+                : undefined
             })
           });
           if (response.ok) {
