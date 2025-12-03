@@ -988,16 +988,21 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       // Mark as downloaded ONLY after successful save
       setDownloadedTracks(prev => new Set(prev).add(track.id));
 
-      // Trigger file download to device
-      const url = window.URL.createObjectURL(audioBlob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = `${track.artist} - ${track.title}.mp3`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      // Trigger file download to device (skip in Telegram WebApp to avoid iOS download popup errors)
+      const isTelegram = Boolean((window as any).Telegram?.WebApp);
+      if (!isTelegram) {
+        const url = window.URL.createObjectURL(audioBlob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `${track.artist} - ${track.title}.mp3`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        console.log("Skipping anchor download inside Telegram WebApp; track saved to IndexedDB");
+      }
 
       // 4. Mark as complete
       setDownloadProgress(prev => new Map(prev).set(track.id, 100));
