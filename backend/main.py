@@ -1204,8 +1204,8 @@ async def stream_audio_proxy(request: Request, url: str = Query(..., description
         proxies = {"http://": proxy, "https://": proxy}
         print(f"Using proxy for stream: {proxy}")
     
-    # Timeout configuration
-    timeout = httpx.Timeout(15.0, read=None)
+    # Timeout configuration - увеличен для больших файлов
+    timeout = httpx.Timeout(30.0, read=120.0)  # 30s connect, 120s read
     client = httpx.AsyncClient(follow_redirects=True, timeout=timeout, proxies=proxies)
     
     # Forward User-Agent from request or use default
@@ -1230,13 +1230,17 @@ async def stream_audio_proxy(request: Request, url: str = Query(..., description
     range_header = request.headers.get("range")
     if range_header:
         headers['Range'] = range_header
+        print(f"[STREAM] Range request: {range_header}")
         
     async def close_client():
         await client.aclose()
         
     try:
+        print(f"[STREAM] Sending request to: {url[:100]}...")
         req = client.build_request("GET", url, headers=headers)
         r = await client.send(req, stream=True)
+        
+        print(f"[STREAM] Response status: {r.status_code}, Content-Type: {r.headers.get('content-type')}, Content-Length: {r.headers.get('content-length')}")
         
         if r.status_code >= 400:
             print(f"Stream error status: {r.status_code} for {url}")
