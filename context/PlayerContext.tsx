@@ -902,16 +902,25 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         // Для остальных треков (включая Hitmo) используем прокси
         let downloadUrl = track.audioUrl;
 
-        // Если URL с Hitmo или уже использует /api/stream, используем прокси
-        if (track.audioUrl.includes('hitmotop.com') || track.audioUrl.startsWith('/api/stream')) {
-          // Если уже использует /api/stream, используем как есть, но добавляем download=true
-          if (track.audioUrl.startsWith('/api/stream')) {
-            downloadUrl = `${API_BASE_URL}${track.audioUrl}${track.audioUrl.includes('?') ? '&' : '?'}download=true`;
-          } else {
-            // Иначе оборачиваем в прокси с download=true
-            downloadUrl = `${API_BASE_URL}/api/stream?url=${encodeURIComponent(track.audioUrl)}&download=true`;
-          }
-          console.log("Using proxy for download:", downloadUrl);
+        const isRelativeStream = track.audioUrl.startsWith('/api/stream');
+        const isAbsoluteStream = track.audioUrl.startsWith(`${API_BASE_URL}/api/stream`);
+        const isProxiedStream = isRelativeStream || isAbsoluteStream || track.audioUrl.includes('/api/stream?url=');
+
+        if (isProxiedStream) {
+          const base = isAbsoluteStream
+            ? track.audioUrl
+            : isRelativeStream
+              ? `${API_BASE_URL}${track.audioUrl}`
+              : track.audioUrl;
+
+          downloadUrl = base.includes('download=true')
+            ? base
+            : `${base}${base.includes('?') ? '&' : '?'}download=true`;
+          console.log("Using existing stream URL for download:", downloadUrl);
+        } else if (track.audioUrl.includes('hitmotop.com')) {
+          // Иначе оборачиваем в прокси с download=true
+          downloadUrl = `${API_BASE_URL}/api/stream?url=${encodeURIComponent(track.audioUrl)}&download=true`;
+          console.log("Using proxy for raw Hitmo URL:", downloadUrl);
         }
 
         audioResponse = await fetch(downloadUrl);

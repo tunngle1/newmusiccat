@@ -76,50 +76,98 @@ class HitmoParser:
                 
                 soup = BeautifulSoup(response.text, 'html.parser')
                 tracks_data = []
-                
-                track_elements = soup.select('.tracks__item')
-                
+
+                def parse_duration(text: Optional[str]) -> int:
+                    if not text:
+                        return 0
+                    match = re.search(r"(\\d+):(\\d{1,2})", text)
+                    if not match:
+                        return 0
+                    mins, secs = match.groups()
+                    try:
+                        return int(mins) * 60 + int(secs)
+                    except Exception:
+                        return 0
+
+                # Collect elements from multiple possible layouts
+                selectors = ['.tracks__item', '.track', '.musicset-track', 'li[data-id]', 'div[data-id]']
+                track_elements = []
+                for selector in selectors:
+                    track_elements.extend(soup.select(selector))
+
+                if not track_elements:
+                    print(f"DEBUG: No tracks found for query '{query}'. Response code: {response.status_code}")
+                    print(f"DEBUG: HTML preview: {response.text[:500]}...")
+                    # Check for captcha or block
+                    if "captcha" in response.text.lower() or "cloudflare" in response.text.lower():
+                        print("DEBUG: Hitmo returned CAPTCHA or Cloudflare block")
+
+                seen = set()
+
                 # 1. Parse basic info
                 for el in track_elements:
                     if len(tracks_data) >= limit:
                         break
-                        
+
                     try:
-                        title_el = el.select_one('.track__title')
-                        artist_el = el.select_one('.track__desc')
-                        time_el = el.select_one('.track__fulltime')
-                        download_el = el.select_one('a.track__download-btn')
-                        cover_el = el.select_one('.track__img')
-                        
-                        if not (title_el and download_el):
+                        title = el.get('data-title') or ''
+                        artist = el.get('data-artist') or ''
+                        duration_str = el.get('data-duration') or el.get('data-time') or el.get('data-length') or ''
+
+                        title_el = el.select_one('.track__title, .title, .track__name, .musicset-track__title')
+                        artist_el = el.select_one('.track__desc, .artist, .musicset-track__artist')
+                        time_el = el.select_one('.track__fulltime, .time, .musicset-track__time')
+
+                        if title_el:
+                            title = title or title_el.text.strip()
+                        if artist_el:
+                            artist = artist or artist_el.text.strip()
+                        if time_el:
+                            duration_str = duration_str or time_el.text.strip()
+
+                        # Fallback: split combined text "Artist - Title"
+                        if (not title or not artist) and el.text and ' - ' in el.text:
+                            parts = el.text.split(' - ', 1)
+                            if len(parts) == 2:
+                                if not artist:
+                                    artist = parts[0].strip()
+                                if not title:
+                                    title = parts[1].strip()
+
+                        duration = parse_duration(duration_str)
+
+                        download_el = el.select_one('a.track__download-btn, a[href*="/get/"], a[href*="/load/"], a[href$=".mp3"], a[data-url]')
+                        url = el.get('data-mp3') or el.get('data-url') or el.get('data-href') or el.get('data-src')
+                        if not url and download_el:
+                            url = download_el.get('href')
+
+                        if not title or not artist or not url:
                             continue
-                            
-                        title = title_el.text.strip()
-                        artist = artist_el.text.strip() if artist_el else "Unknown"
-                        duration_str = time_el.text.strip() if time_el else "00:00"
-                        
-                        try:
-                            mins, secs = map(int, duration_str.split(':'))
-                            duration = mins * 60 + secs
-                        except:
-                            duration = 0
-                            
-                        url = download_el.get('href')
-                        if not url:
-                            continue
-                            
-                        track_id = el.get('data-track-id')
+
+                        # Normalize URL
+                        if url.startswith('//'):
+                            url = f"https:{url}"
+                        elif url.startswith('/'):
+                            url = f"{self.BASE_URL}{url}"
+
+                        track_id = el.get('data-track-id') or el.get('data-id') or el.get('id')
                         if not track_id:
                             track_id = f"gen_{abs(hash(artist + title))}"
-                            
-                        # Extract fallback cover from style
-                        fallback_image = None
-                        if cover_el:
+
+                        key = f"{track_id}-{title}-{artist}"
+                        if key in seen:
+                            continue
+                        seen.add(key)
+
+                        # Extract fallback cover from style or data-image
+                        fallback_image = el.get('data-image') or el.get('data-img')
+                        cover_el = el.select_one('.track__img, .musicset-track__cover, .cover')
+                        if cover_el and not fallback_image:
                             style = cover_el.get('style', '')
-                            match = re.search(r"url\(['\"]?(.*?)['\"]?\)", style)
+                            match = re.search(r"url\\(['\"]?(.*?)['\"]?\\)", style)
                             if match:
                                 fallback_image = match.group(1)
-                        
+
                         tracks_data.append({
                             'id': track_id,
                             'title': title,
@@ -129,7 +177,7 @@ class HitmoParser:
                             'fallback_image': fallback_image,
                             'image': None # Will be filled later
                         })
-                        
+
                     except Exception as e:
                         print(f"Error parsing track: {e}")
                         continue
