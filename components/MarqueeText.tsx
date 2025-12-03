@@ -15,13 +15,29 @@ const MarqueeText: React.FC<MarqueeTextProps> = ({ text, className = '' }) => {
             if (containerRef.current && measureRef.current) {
                 const containerWidth = containerRef.current.offsetWidth;
                 const textWidth = measureRef.current.offsetWidth;
-                setNeedsMarquee(textWidth > containerWidth);
+                setNeedsMarquee(textWidth > containerWidth && containerWidth > 0);
             }
         };
 
+        // Initial + delayed measure to catch late font/render
         checkOverflow();
+        const timeoutId = window.setTimeout(checkOverflow, 50);
+
+        // Track container size changes
+        const observer = new ResizeObserver(checkOverflow);
+        if (containerRef.current) {
+            observer.observe(containerRef.current);
+        }
+
         window.addEventListener('resize', checkOverflow);
-        return () => window.removeEventListener('resize', checkOverflow);
+        window.addEventListener('orientationchange', checkOverflow);
+
+        return () => {
+            window.clearTimeout(timeoutId);
+            observer.disconnect();
+            window.removeEventListener('resize', checkOverflow);
+            window.removeEventListener('orientationchange', checkOverflow);
+        };
     }, [text]);
 
     return (
