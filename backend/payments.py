@@ -10,50 +10,13 @@ except ImportError:
     from database import User, Payment
 
 # Константы для оплаты
-STARS_PRICE_MONTH = 100  # Цена в звездах за месяц
-STARS_PRICE_YEAR = 1000  # Цена в звездах за год
-
-RUB_PRICE_MONTH = 199    # Цена в рублях за месяц
-RUB_PRICE_YEAR = 1990    # Цена в рублях за год
+RUB_PRICE_MONTH = 139    # Цена в рублях за месяц
+RUB_PRICE_YEAR = 1390    # Цена в рублях за год
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "")
 YOOMONEY_WALLET = os.getenv("YOOMONEY_WALLET")
 YOOMONEY_SECRET = os.getenv("YOOMONEY_SECRET")
-
-async def create_stars_invoice(user_id: int, plan: str) -> Dict[str, Any]:
-    """
-    Создает ссылку на инвойс для оплаты Telegram Stars.
-    plan: 'month' или 'year'
-    """
-    if not BOT_TOKEN:
-        raise Exception("BOT_TOKEN not configured")
-
-    amount = STARS_PRICE_MONTH if plan == 'month' else STARS_PRICE_YEAR
-    title = f"Premium Subscription ({'1 Month' if plan == 'month' else '1 Year'})"
-    description = "Access to exclusive features and unlimited downloads"
-    payload = f"stars_{plan}_{user_id}_{int(datetime.utcnow().timestamp())}"
-    
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/createInvoiceLink"
-    
-    data = {
-        "title": title,
-        "description": description,
-        "payload": payload,
-        "provider_token": "", # Пусто для Stars
-        "currency": "XTR",    # Валюта для Stars
-        "prices": [{"label": "Premium", "amount": amount}],
-        "photo_url": "https://example.com/premium_image.jpg" # Можно добавить ссылку на картинку
-    }
-    
-    async with httpx.AsyncClient() as client:
-        response = await client.post(url, json=data)
-        result = response.json()
-        
-        if not result.get("ok"):
-            raise Exception(f"Failed to create invoice: {result.get('description')}")
-            
-        return {"invoice_link": result["result"]}
 
 
 def create_yoomoney_link(user_id: int, plan: str, amount: float) -> str:

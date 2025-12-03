@@ -10,7 +10,7 @@ const PLANS: SubscriptionPlan[] = [
         name: '1 Месяц',
         priceStars: 100,
         priceTon: 1.0,
-        priceRub: 199,
+        priceRub: 139,
         duration: '30 дней',
         features: ['Безлимитное скачивание', 'Доступ к эксклюзивам', 'Поддержка авторов']
     },
@@ -19,7 +19,7 @@ const PLANS: SubscriptionPlan[] = [
         name: '1 Год',
         priceStars: 1000,
         priceTon: 10.0,
-        priceRub: 1990,
+        priceRub: 1390,
         duration: '365 дней',
         features: ['Все преимущества', 'Выгоднее на 20%', 'Золотой бейдж']
     }
@@ -79,57 +79,6 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
         return originalPrice;
     };
 
-
-    const handleStarsPayment = async () => {
-        if (!user) return;
-
-        setIsLoading(true);
-        try {
-            const finalPrice = getDiscountedPrice(selectedPlan.priceStars);
-
-            // Создаем invoice для оплаты звездами
-            const response = await fetch(`${API_BASE_URL}/api/payment/create-stars-invoice`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    user_id: user.id,
-                    plan_id: selectedPlan.id,
-                    promo_code: appliedPromo?.code || null,
-                    amount: finalPrice
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to create invoice');
-            }
-
-            const { invoice_link } = await response.json();
-
-            // Открываем invoice через Telegram WebApp API
-            if (window.Telegram?.WebApp?.openInvoice) {
-                window.Telegram.WebApp.openInvoice(invoice_link, (status: string) => {
-                    if (status === 'paid') {
-                        window.Telegram.WebApp.showAlert('Оплата прошла успешно! Премиум активирован.');
-                        onClose();
-                        // Перезагрузить страницу для обновления статуса
-                        window.location.reload();
-                    } else if (status === 'cancelled') {
-                        window.Telegram.WebApp.showAlert('Оплата отменена');
-                    } else if (status === 'failed') {
-                        window.Telegram.WebApp.showAlert('Ошибка оплаты. Попробуйте снова.');
-                    }
-                });
-            } else {
-                window.Telegram.WebApp.showAlert('Ваша версия Telegram не поддерживает оплату звездами');
-            }
-
-        } catch (error) {
-            console.error('Stars Payment error:', error);
-            window.Telegram.WebApp.showAlert('Ошибка при создании счета на оплату.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
     const handleYooMoneyPayment = async () => {
         if (!user) return;
@@ -261,21 +210,6 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
                             <>
                                 <CreditCard size={20} />
                                 Оплатить {selectedPlan.priceRub} ₽
-                            </>
-                        )}
-                    </button>
-
-                    <button
-                        onClick={handleStarsPayment}
-                        disabled={isLoading}
-                        className="w-full py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                    >
-                        {isLoading ? (
-                            <Loader size={18} className="animate-spin" />
-                        ) : (
-                            <>
-                                <Star size={18} fill="currentColor" className="text-yellow-400" />
-                                <span>Telegram Stars ({getDiscountedPrice(selectedPlan.priceStars)} ⭐)</span>
                             </>
                         )}
                     </button>

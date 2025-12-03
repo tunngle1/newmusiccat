@@ -2,6 +2,9 @@
 FastAPI Backend for Telegram Music Mini App
 """
 
+from dotenv import load_dotenv
+load_dotenv()  # Загружаем переменные из .env файла
+
 from fastapi import FastAPI, HTTPException, Query, Depends, Body, BackgroundTasks, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,12 +19,9 @@ try:
     from backend.cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from backend.lyrics_service import LyricsService
     from backend.payments import (
-        create_stars_invoice,
         grant_premium_after_payment,
         create_yoomoney_link,
         verify_yoomoney_notification,
-        STARS_PRICE_MONTH,
-        STARS_PRICE_YEAR,
         RUB_PRICE_MONTH,
         RUB_PRICE_YEAR
     )
@@ -32,12 +32,9 @@ except ImportError:
     from cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from lyrics_service import LyricsService
     from payments import (
-        create_stars_invoice,
         grant_premium_after_payment,
         create_yoomoney_link,
         verify_yoomoney_notification,
-        STARS_PRICE_MONTH,
-        STARS_PRICE_YEAR,
         RUB_PRICE_MONTH,
         RUB_PRICE_YEAR
     )
