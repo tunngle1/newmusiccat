@@ -60,6 +60,27 @@ const PRESET_GENRES = [
 type MenuView = 'main' | 'subscription' | 'referrals' | 'admin';
 type AdminTab = 'stats' | 'users' | 'activity' | 'broadcast';
 
+interface ReferralStats {
+  total_referrals: number;
+  completed_referrals: number;
+  pending_referrals: number;
+  referrals: Array<{
+    id: number;
+    user_id: number;
+    username: string | null;
+    first_name: string | null;
+    status: string;
+    reward_given: boolean;
+    created_at: string | null;
+    completed_at: string | null;
+  }>;
+}
+
+interface ReferralCode {
+  code: string;
+  link: string;
+}
+
 const formatSeconds = (seconds: number | undefined) => {
   if (seconds === undefined || Number.isNaN(seconds)) return '0:00';
   return formatDuration(Math.max(0, Math.floor(seconds)));
@@ -162,6 +183,41 @@ const NewDesignApp: React.FC = () => {
   const [youtubeLink, setYoutubeLink] = useState('');
   const [youtubeTrack, setYoutubeTrack] = useState<Track | null>(null);
   const [isYoutubeLoading, setIsYoutubeLoading] = useState(false);
+
+  // Referral state
+  const [referralStats, setReferralStats] = useState<ReferralStats | null>(null);
+  const [referralCode, setReferralCode] = useState<ReferralCode | null>(null);
+  const [isReferralLoading, setIsReferralLoading] = useState(false);
+
+  const fetchReferralData = async () => {
+    if (!user) return;
+    setIsReferralLoading(true);
+    try {
+      const [codeRes, statsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/referral/code?user_id=${user.id}`),
+        fetch(`${API_BASE_URL}/api/referral/stats?user_id=${user.id}`)
+      ]);
+
+      if (codeRes.ok) {
+        const codeData = await codeRes.json();
+        setReferralCode(codeData);
+      }
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        setReferralStats(statsData);
+      }
+    } catch (error) {
+      console.error('Failed to fetch referral data:', error);
+    } finally {
+      setIsReferralLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (menuView === 'referrals' && user) {
+      fetchReferralData();
+    }
+  }, [menuView, user]);
 
   const handleSelectArtist = (artistName: string) => {
     setShowArtistSelector(false);
@@ -587,7 +643,9 @@ const NewDesignApp: React.FC = () => {
   };
 
   const handleCopyReferral = () => {
-    navigator.clipboard.writeText('https://t.me/your_bot?start=ref');
+    const link = referralCode?.link || 'https://t.me/zvuklybot?start=ref';
+    const inviteText = `🎵 Присоединяйся к лучшему музыкальному боту!\n\n🎁 Получи 3 дня Premium бесплатно при регистрации!\n\n👇 Переходи по ссылке:\n${link}`;
+    navigator.clipboard.writeText(inviteText);
     showToast('Реферальная ссылка скопирована');
   };
 
@@ -1248,14 +1306,59 @@ const NewDesignApp: React.FC = () => {
         );
       case 'referrals':
         return (
-          <div className="p-6 space-y-4">
+          <div className="p-6 space-y-6">
             <h3 className="text-xl font-black uppercase tracking-widest">Рефералы</h3>
-            <button
-              onClick={handleCopyReferral}
-              className="w-full p-4 bg-lebedev-white text-lebedev-black font-black uppercase tracking-widest hover:bg-lebedev-red hover:text-white transition-colors inline-flex items-center justify-center gap-2"
-            >
-              <CopyIcon className="w-5 h-5" /> Скопировать ссылку
-            </button>
+
+            {isReferralLoading ? (
+              <div className="text-center py-8 text-lebedev-gray uppercase font-bold tracking-widest">Загрузка...</div>
+            ) : (
+              <>
+                <div className="p-4 border border-lebedev-white bg-lebedev-white/5">
+                  <div className="text-xs font-bold uppercase text-lebedev-gray mb-2">Ваша ссылка</div>
+                  <div className="font-mono text-sm break-all mb-4 text-lebedev-white">{referralCode?.link || 'Загрузка...'}</div>
+                  <button
+                    onClick={handleCopyReferral}
+                    className="w-full p-3 bg-lebedev-white text-lebedev-black font-black uppercase tracking-widest hover:bg-lebedev-red hover:text-white transition-colors inline-flex items-center justify-center gap-2"
+                  >
+                    <CopyIcon className="w-5 h-5" /> Скопировать
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 border border-lebedev-white/20 text-center">
+                    <div className="text-2xl font-black">{referralStats?.total_referrals || 0}</div>
+                    <div className="text-[10px] uppercase font-bold text-lebedev-gray">Всего</div>
+                  </div>
+                  <div className="p-3 border border-lebedev-white/20 text-center">
+                    <div className="text-2xl font-black text-green-500">{referralStats?.completed_referrals || 0}</div>
+                    <div className="text-[10px] uppercase font-bold text-lebedev-gray">Активных</div>
+                  </div>
+                  <div className="p-3 border border-lebedev-white/20 text-center">
+                    <div className="text-2xl font-black text-yellow-500">{referralStats?.pending_referrals || 0}</div>
+                    <div className="text-[10px] uppercase font-bold text-lebedev-gray">Ожидают</div>
+                  </div>
+                </div>
+
+                {referralStats?.referrals && referralStats.referrals.length > 0 && (
+                  <div>
+                    <div className="text-sm font-black uppercase tracking-widest mb-3">Ваши рефералы</div>
+                    <div className="space-y-2">
+                      {referralStats.referrals.map((ref) => (
+                        <div key={ref.id} className="p-3 border border-lebedev-white/10 flex justify-between items-center">
+                          <div>
+                            <div className="font-bold text-sm">{ref.first_name || ref.username || `User ${ref.user_id}`}</div>
+                            <div className="text-xs text-lebedev-gray">{ref.username ? `@${ref.username}` : ''}</div>
+                          </div>
+                          <div className={`text-xs font-bold uppercase px-2 py-1 ${ref.status === 'completed' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'}`}>
+                            {ref.status === 'completed' ? 'Активен' : 'Ожидает'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         );
       default:
