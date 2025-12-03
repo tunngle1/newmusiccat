@@ -318,8 +318,30 @@ async def auth_user(user_data: UserAuth, db: Session = Depends(get_db)):
         user.first_name = user_data.first_name
         user.last_name = user_data.last_name
         db.commit()
+    
+    # Проверяем доступ
+    has_access_result, reason, details = has_access(user)
+    
+    subscription_status = {
+        "has_access": has_access_result,
+        "reason": reason,
+        **details
+    }
         
-    return {"status": "ok", "user": user}
+    return {
+        "status": "ok",
+        "is_new_user": is_new_user,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "is_admin": user.is_admin,
+            "is_premium": user.is_premium,
+            "is_premium_pro": user.is_premium_pro,
+            "subscription_status": subscription_status
+        }
+    }
 
 # Genres endpoint
     

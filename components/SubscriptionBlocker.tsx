@@ -34,11 +34,18 @@ const SubscriptionBlocker: React.FC<SubscriptionBlockerProps> = ({ user, onRefre
                     message: 'Ваш аккаунт был заблокирован администратором. Для получения дополнительной информации свяжитесь с поддержкой.',
                     icon: '🚫'
                 };
-            case 'expired':
+            case 'trial_expired':
                 return {
                     title: 'Пробный период истек',
                     message: 'Ваш 3-дневный пробный период закончился. Для продолжения использования сервиса необходимо оформить премиум-подписку.',
                     icon: '⏰'
+                };
+            case 'expired':
+            case 'no_access':
+                return {
+                    title: 'Требуется подписка',
+                    message: 'Для использования сервиса необходима активная подписка.',
+                    icon: '💎'
                 };
             default:
                 return {
@@ -51,6 +58,7 @@ const SubscriptionBlocker: React.FC<SubscriptionBlockerProps> = ({ user, onRefre
 
     const blockInfo = getBlockMessage();
     const isBlocked = user?.subscription_status?.reason === 'blocked';
+    const isTrialExpired = user?.subscription_status?.reason === 'trial_expired';
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black">
@@ -97,7 +105,7 @@ const SubscriptionBlocker: React.FC<SubscriptionBlockerProps> = ({ user, onRefre
                             </div>
                         </button>
 
-                        {!isBlocked && (
+                        {!isBlocked && !isTrialExpired && (
                             <button
                                 onClick={onRefresh}
                                 className="w-full py-4 px-6 rounded-xl text-gray-400 font-semibold hover:text-white hover:bg-white/5 transition-all"
