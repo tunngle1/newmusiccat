@@ -10,18 +10,16 @@ from typing import List, Optional, Dict, Any
 import uvicorn
 from sqlalchemy.orm import Session
 from datetime import datetime
-from database import PromoCode
-
 try:
     from backend.hitmo_parser_light import HitmoParser
-    from backend.database import User, DownloadedMessage, Lyrics, Payment, Referral, get_db, init_db, SessionLocal
+    from backend.database import User, DownloadedMessage, Lyrics, Payment, Referral, PromoCode, get_db, init_db, SessionLocal
     from backend.cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from backend.lyrics_service import LyricsService
     from backend.payments import create_stars_invoice, verify_ton_transaction, grant_premium_after_payment
     from backend.tribute import verify_tribute_signature
 except ImportError:
     from hitmo_parser_light import HitmoParser
-    from database import User, DownloadedMessage, Lyrics, Payment, Referral, get_db, init_db, SessionLocal
+    from database import User, DownloadedMessage, Lyrics, Payment, Referral, PromoCode, get_db, init_db, SessionLocal
     from cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from lyrics_service import LyricsService
     from payments import create_stars_invoice, verify_ton_transaction, grant_premium_after_payment

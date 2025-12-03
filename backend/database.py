@@ -82,6 +82,22 @@ class Referral(Base):
     completed_at = Column(DateTime, nullable=True)  # When referral made first purchase
 
 
+class PromoCode(Base):
+    __tablename__ = "promo_codes"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    code = Column(String, unique=True, index=True, nullable=False)
+    discount_type = Column(String, nullable=False)  # 'percent', 'fixed', 'trial'
+    value = Column(Integer, default=0)  # percent or fixed amount
+    used_count = Column(Integer, default=0)
+    max_uses = Column(Integer, default=0)  # 0 = unlimited
+    is_active = Column(Boolean, default=True)
+    expires_at = Column(DateTime, nullable=True)
+    tribute_link_month = Column(String, nullable=True)
+    tribute_link_year = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 
 def init_db():
     Base.metadata.create_all(bind=engine)
