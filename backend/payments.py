@@ -1,4 +1,4 @@
-import os
+﻿import os
 import httpx
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
@@ -10,14 +10,16 @@ except ImportError:
     from database import User, Payment
 
 # Константы для оплаты
-STARS_PRICE_MONTH = 100  # Цена в звездах за месяц (пример)
-STARS_PRICE_YEAR = 1000  # Цена в звездах за год (пример)
+STARS_PRICE_MONTH = 100  # Цена в звездах за месяц
+STARS_PRICE_YEAR = 1000  # Цена в звездах за год
 
-TON_PRICE_MONTH = 1.0    # Цена в TON за месяц
-TON_PRICE_YEAR = 10.0    # Цена в TON за год
+RUB_PRICE_MONTH = 199    # Цена в рублях за месяц
+RUB_PRICE_YEAR = 1990    # Цена в рублях за год
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-TON_WALLET_ADDRESS = os.getenv("TON_WALLET_ADDRESS", "UQBtZ_...") # Заглушка, если не задан
+PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "")
+YOOMONEY_WALLET = os.getenv("YOOMONEY_WALLET")
+YOOMONEY_SECRET = os.getenv("YOOMONEY_SECRET")
 
 async def create_stars_invoice(user_id: int, plan: str) -> Dict[str, Any]:
     """
@@ -53,135 +55,92 @@ async def create_stars_invoice(user_id: int, plan: str) -> Dict[str, Any]:
             
         return {"invoice_link": result["result"]}
 
-async def verify_ton_transaction(boc: str, user_id: int, plan: str) -> bool:
+
+def create_yoomoney_link(user_id: int, plan: str, amount: float) -> str:
     """
-    Проверяет транзакцию TON через tonapi.io (Testnet).
+    Создает ссылку на оплату через ЮMoney (QuickPay).
     
     Args:
-        boc: Base64-encoded Bag of Cells (транзакция)
         user_id: ID пользователя
         plan: План подписки ('month' или 'year')
+        amount: Сумма в рублях
     
     Returns:
-        True если транзакция валидна, False в противном случае
+        URL для оплаты
     """
-    try:
-        from pytoniq_core import Cell
-        import base64
-        
-        print(f"🔍 [TON] Verifying transaction for user {user_id}, plan {plan}")
-        print(f"📦 BOC length: {len(boc)} characters")
-        
-        # 1. Декодируем BOC
-        try:
-            # BOC может быть в base64, декодируем
-            boc_bytes = base64.b64decode(boc)
-            cell = Cell.one_from_boc(boc_bytes)
-            
-            # Получаем хэш транзакции
-            tx_hash = cell.hash.hex()
-            print(f"🔑 Transaction hash: {tx_hash}")
-            
-        except Exception as e:
-            print(f"❌ Failed to decode BOC: {e}")
-            return False
-        
-        # 2. Проверяем транзакцию через TON API
-        ton_api_url = os.getenv("TON_API_URL", "https://testnet.tonapi.io")
-        api_key = os.getenv("TON_API_KEY", "")
-        
-        headers = {
-            "Accept": "application/json"
-        }
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-        
-        # Запрашиваем информацию о транзакции
-        api_endpoint = f"{ton_api_url}/v2/blockchain/transactions/{tx_hash}"
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            try:
-                response = await client.get(api_endpoint, headers=headers)
-                
-                if response.status_code == 404:
-                    print(f"❌ Transaction not found in blockchain: {tx_hash}")
-                    return False
-                
-                if response.status_code != 200:
-                    print(f"❌ API error: {response.status_code} - {response.text}")
-                    return False
-                
-                tx_data = response.json()
-                print(f"✅ Transaction found in blockchain")
-                
-            except Exception as e:
-                print(f"❌ API request failed: {e}")
-                return False
-        
-        # 3. Валидация транзакции
-        
-        # 3.1 Проверяем успешность транзакции
-        if not tx_data.get("success", False):
-            print(f"❌ Transaction failed (success=False)")
-            return False
-        
-        # 3.2 Проверяем получателя
-        out_msgs = tx_data.get("out_msgs", [])
-        if not out_msgs:
-            print(f"❌ No outgoing messages in transaction")
-            return False
-        
-        # Ищем сообщение с переводом на наш кошелек
-        expected_wallet = TON_WALLET_ADDRESS.lower()
-        found_payment = False
-        received_amount = 0
-        
-        for msg in out_msgs:
-            destination = msg.get("destination", {})
-            dest_address = destination.get("address", "").lower()
-            
-            # Сумма в нано-тонах
-            value = int(msg.get("value", 0))
-            
-            if expected_wallet in dest_address or dest_address in expected_wallet:
-                found_payment = True
-                received_amount = value / 1_000_000_000  # Конвертируем в TON
-                print(f"💰 Payment found: {received_amount} TON to {dest_address}")
-                break
-        
-        if not found_payment:
-            print(f"❌ Payment to {expected_wallet} not found in transaction")
-            return False
-        
-        # 3.3 Проверяем сумму
-        expected_amount = TON_PRICE_MONTH if plan == 'month' else TON_PRICE_YEAR
-        
-        # Допускаем небольшую погрешность (0.01 TON) из-за комиссий
-        if abs(received_amount - expected_amount) > 0.01:
-            print(f"❌ Amount mismatch: expected {expected_amount} TON, got {received_amount} TON")
-            return False
-        
-        # 3.4 Проверяем время транзакции (не старше 10 минут)
-        tx_timestamp = tx_data.get("utime", 0)
-        current_timestamp = int(datetime.utcnow().timestamp())
-        
-        if current_timestamp - tx_timestamp > 600:  # 10 минут
-            print(f"❌ Transaction too old: {current_timestamp - tx_timestamp} seconds")
-            return False
-        
-        print(f"✅ Transaction verified successfully!")
-        print(f"   Hash: {tx_hash}")
-        print(f"   Amount: {received_amount} TON")
-        print(f"   Recipient: {dest_address}")
-        print(f"   Time: {tx_timestamp}")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Error verifying TON transaction: {e}")
-        import traceback
-        traceback.print_exc()
+    if not YOOMONEY_WALLET:
+        raise Exception("YOOMONEY_WALLET not configured")
+    
+    # Формируем label для идентификации платежа
+    label = f"{user_id}:{plan}"
+    
+    # Параметры для QuickPay
+    params = {
+        'receiver': YOOMONEY_WALLET,
+        'quickpay-form': 'shop',
+        'targets': f'Premium подписка ({plan})',
+        'paymentType': 'AC',  # Оплата с карты
+        'sum': amount,
+        'label': label
+    }
+    
+    # Формируем URL
+    from urllib.parse import urlencode
+    base_url = "https://yoomoney.ru/quickpay/confirm.xml"
+    payment_url = f"{base_url}?{urlencode(params)}"
+    
+    return payment_url
+
+
+def verify_yoomoney_notification(data: dict) -> bool:
+    """
+    Проверяет подпись уведомления от ЮMoney.
+    
+    Args:
+        data: Данные из POST-запроса от ЮMoney
+    
+    Returns:
+        True если подпись верна, False в противном случае
+    """
+    if not YOOMONEY_SECRET:
+        print("❌ YOOMONEY_SECRET not configured")
         return False
+    
+    try:
+        secret = YOOMONEY_SECRET
+        
+        # Параметры для проверки подписи (в строгом порядке)
+        params = [
+            data.get('notification_type', ''),
+            data.get('operation_id', ''),
+            data.get('amount', ''),
+            data.get('currency', ''),
+            data.get('datetime', ''),
+            data.get('sender', ''),
+            data.get('codepro', ''),
+            secret,
+            data.get('label', '')
+        ]
+        
+        # Собираем строку для хеширования
+        string_to_hash = '&'.join(str(x) for x in params)
+        
+        import hashlib
+        # Вычисляем SHA-1 хеш
+        calculated_hash = hashlib.sha1(string_to_hash.encode('utf-8')).hexdigest()
+        
+        # Сравниваем с присланным хешем
+        received_hash = data.get('sha1_hash', '')
+        
+        if calculated_hash == received_hash:
+            return True
+        
+        print(f"❌ Hash mismatch: calculated {calculated_hash} != received {received_hash}")
+        print(f"   String to hash: {string_to_hash}")
+    except Exception as e:
+        print(f"❌ Error verifying YooMoney notification: {e}")
+    return False
+
 
 def grant_premium_after_payment(db: Session, user_id: int, plan: str, payment_method: str, amount: float = 0):
     """
@@ -211,11 +170,19 @@ def grant_premium_after_payment(db: Session, user_id: int, plan: str, payment_me
         user.is_premium = True
         print("DEBUG: User updated")
         
+        # Определяем валюту
+        if payment_method == "yoomoney_p2p":
+            currency = "RUB"
+        elif payment_method in ["stars", "telegram_stars"]:
+            currency = "XTR"
+        else:
+            currency = "XTR"
+        
         # Сохраняем платеж
         payment = Payment(
             user_id=user_id,
             amount=str(amount),
-            currency="TON" if payment_method == "ton" else "XTR",
+            currency=currency,
             plan=plan,
             status="completed",
             created_at=now

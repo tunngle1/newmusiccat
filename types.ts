@@ -28,6 +28,7 @@ export interface SubscriptionPlan {
   name: string;
   priceStars: number;
   priceTon: number;
+  priceRub: number;
   duration: string;
   features: string[];
 }

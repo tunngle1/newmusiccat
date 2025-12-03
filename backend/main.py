@@ -15,14 +15,32 @@ try:
     from backend.database import User, DownloadedMessage, Lyrics, Payment, Referral, PromoCode, get_db, init_db, SessionLocal
     from backend.cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from backend.lyrics_service import LyricsService
-    from backend.payments import create_stars_invoice, verify_ton_transaction, grant_premium_after_payment
+    from backend.payments import (
+        create_stars_invoice,
+        grant_premium_after_payment,
+        create_yoomoney_link,
+        verify_yoomoney_notification,
+        STARS_PRICE_MONTH,
+        STARS_PRICE_YEAR,
+        RUB_PRICE_MONTH,
+        RUB_PRICE_YEAR
+    )
     from backend.tribute import verify_tribute_signature
 except ImportError:
     from hitmo_parser_light import HitmoParser
     from database import User, DownloadedMessage, Lyrics, Payment, Referral, PromoCode, get_db, init_db, SessionLocal
     from cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from lyrics_service import LyricsService
-    from payments import create_stars_invoice, verify_ton_transaction, grant_premium_after_payment
+    from payments import (
+        create_stars_invoice,
+        grant_premium_after_payment,
+        create_yoomoney_link,
+        verify_yoomoney_notification,
+        STARS_PRICE_MONTH,
+        STARS_PRICE_YEAR,
+        RUB_PRICE_MONTH,
+        RUB_PRICE_YEAR
+    )
     from tribute import verify_tribute_signature
 
 import os
@@ -828,58 +846,82 @@ async def create_stars_invoice_with_promo(request: CreateStarsInvoiceRequest, db
             if not data.get("ok"):
                 raise HTTPException(status_code=500, detail=data.get("description", "Failed to create invoice"))
             
+            print(f"Telegram Stars invoice created user={request.user_id} plan={request.plan_id} amount={final_amount} payload={payload['payload']}")
             return {
                 "status": "ok",
                 "invoice_link": data["result"]
             }
-            
     except Exception as e:
-        print(f"Error creating Stars invoice: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-@app.post("/api/webhook/telegram")
-async def telegram_webhook(update: Dict[str, Any] = Body(...), db: Session = Depends(get_db)):
-    """Вебхук для обработки обновлений от Telegram (включая оплату Stars)"""
+
+@app.post("/api/payment/create-yoomoney-link")
+async def create_yoomoney_link_endpoint(request: CreateStarsInvoiceRequest, db: Session = Depends(get_db)):
+    """Создание ссылки для оплаты через ЮMoney (P2P)"""
     try:
-        # Обработка PreCheckoutQuery (проверка перед оплатой)
-        if "pre_checkout_query" in update:
-            query = update["pre_checkout_query"]
-            query_id = query["id"]
+        # Определяем цену
+        amount = RUB_PRICE_MONTH if request.plan_id == 'month' else RUB_PRICE_YEAR
+        
+        # Генерируем ссылку
+        link = create_yoomoney_link(request.user_id, request.plan_id, amount)
+        
+        print(f"YooMoney link created: user={request.user_id} plan={request.plan_id} amount={amount}")
+        return {
+            "status": "ok",
+            "payment_link": link
+        }
+    except Exception as e:
+        print(f"Error creating YooMoney link: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/webhook/yoomoney")
+async def yoomoney_webhook(request: Request, db: Session = Depends(get_db)):
+    """
+    Webhook для обработки уведомлений от ЮMoney (HTTP-notification).
+    """
+    try:
+        # Получаем данные формы (application/x-www-form-urlencoded)
+        form_data = await request.form()
+        data = dict(form_data)
+        
+        print(f"📥 YooMoney webhook received: {data}")
+        
+        # Проверяем подпись
+        if not verify_yoomoney_notification(data):
+            print("❌ Invalid YooMoney signature")
+            return Response(status_code=200) # Возвращаем 200, чтобы не слали повторы, но логируем ошибку
             
-            # Всегда подтверждаем
-            telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/answerPreCheckoutQuery"
-            async with httpx.AsyncClient() as client:
-                await client.post(telegram_url, json={
-                    "pre_checkout_query_id": query_id,
-                    "ok": True
-                })
-            return {"status": "ok"}
+        # Парсим label
+        label = data.get("label", "")
+        parts = label.split(":")
+        
+        if len(parts) >= 2:
+            user_id = int(parts[0])
+            plan = parts[1]
+            amount = float(data.get("amount", 0))
             
-        # Обработка SuccessfulPayment (успешная оплата)
-        if "message" in update and "successful_payment" in update["message"]:
-            payment = update["message"]["successful_payment"]
-            user_id = update["message"]["from"]["id"]
-            payload = payment["invoice_payload"] # stars_month_12345_timestamp
-            amount = payment["total_amount"] # В звездах
+            print(f"✅ YooMoney payment verified: user={user_id} plan={plan} amount={amount}")
             
-            # Парсим payload
-            parts = payload.split("_")
-            if len(parts) >= 2:
-                plan = parts[1] # month или year
-                grant_premium_after_payment(db, user_id, plan, "stars", amount)
-                print(f"✅ Premium granted to user {user_id} via Stars ({plan})")
-                
-            return {"status": "ok"}
+            # Выдаем премиум
+            success = grant_premium_after_payment(db, user_id, plan, "yoomoney_p2p", amount)
             
-        return {"status": "ok", "message": "Update ignored"}
+            if success:
+                print(f"✅ Premium granted to {user_id}")
+            else:
+                print(f"❌ Failed to grant premium to {user_id}")
+        else:
+            print(f"❌ Invalid label format: {label}")
+            
+        return Response(status_code=200)
         
     except Exception as e:
-        print(f"Webhook error: {e}")
-        # Не возвращаем ошибку Telegram, чтобы он не слал повторы бесконечно
-        return {"status": "ok"}
+        print(f"❌ YooMoney webhook error: {e}")
+        import traceback
+        traceback.print_exc()
+        return Response(status_code=200)
 
 @app.post("/api/webhook/tribute")
 async def tribute_webhook(request: Request, db: Session = Depends(get_db)):
-    """Webhook for Tribute.tg payments"""
+    """Webhook для Tribute (если используется)"""
     try:
         # 1. Verify signature
         api_key = os.getenv("TRIBUTE_API_KEY")
@@ -888,10 +930,6 @@ async def tribute_webhook(request: Request, db: Session = Depends(get_db)):
         
         if not verify_tribute_signature(api_key, body, signature):
             print("Invalid Tribute signature")
-            # Return 200 to prevent retries if it's just a config issue, but log error
-            # Actually, return 401 if signature is wrong so we know
-            # But for stability, let's just log and return 200 if we are unsure
-            # Better to raise 401 to see it in logs
             raise HTTPException(status_code=401, detail="Invalid signature")
             
         # 2. Parse payload
@@ -943,6 +981,62 @@ async def tribute_webhook(request: Request, db: Session = Depends(get_db)):
         return {"status": "ok"}
 
 # --- Debug Endpoints (для тестирования) ---
+
+@app.post("/api/webhook/telegram")
+async def telegram_webhook(update: Dict[str, Any] = Body(...), db: Session = Depends(get_db)):
+    """
+    Webhook от Bot API для приёма успешных платежей Telegram Stars.
+    Ожидает successful_payment в update.message и invoice_payload вида "user_id:plan[:promo]".
+    """
+    try:
+        message = update.get("message") or {}
+        successful_payment = message.get("successful_payment")
+        if not successful_payment:
+            return {"status": "ignored"}
+        
+        payload = successful_payment.get("invoice_payload", "") or ""
+        parts = payload.split(":")
+        
+        # user_id и план из payload; fallback на отправителя
+        payload_user_id = None
+        try:
+            payload_user_id = int(parts[0]) if parts else None
+        except Exception:
+            payload_user_id = None
+        
+        plan = parts[1] if len(parts) > 1 and parts[1] in ("month", "year") else None
+        payer_id = message.get("from", {}).get("id") or message.get("chat", {}).get("id")
+        user_id = payload_user_id or payer_id
+        
+        if not user_id:
+            print(f"Telegram Stars: не удалось определить user_id, payload={payload}, payer={payer_id}")
+            return {"status": "ignored"}
+        
+        amount = successful_payment.get("total_amount", 0) or 0
+        currency = (successful_payment.get("currency") or "").upper()
+        
+        # Если план не распознан, определяем по сумме
+        if not plan:
+            if amount >= STARS_PRICE_YEAR:
+                plan = "year"
+            else:
+                plan = "month"
+        
+        # Мягкая проверка суммы
+        expected_amount = STARS_PRICE_MONTH if plan == "month" else STARS_PRICE_YEAR
+        if amount and abs(amount - expected_amount) > 1:
+            print(f"Telegram Stars: сумма не совпадает с тарифом: {amount} vs {expected_amount}")
+        
+        success = grant_premium_after_payment(db, int(user_id), plan, "stars", amount)
+        if success:
+            print(f"Telegram Stars: premium выдан user={user_id} plan={plan} amount={amount} currency={currency} payer={payer_id}")
+        else:
+            print(f"Telegram Stars: не удалось выдать premium user={user_id} plan={plan}")
+        
+        return {"status": "ok"}
+    except Exception as e:
+        print(f"Telegram webhook error: {e}")
+        return {"status": "ok"}
 
 @app.post("/api/debug/grant-premium")
 async def debug_grant_premium(

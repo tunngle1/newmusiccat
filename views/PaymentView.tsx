@@ -10,6 +10,7 @@ const PLANS: SubscriptionPlan[] = [
         name: '1 Месяц',
         priceStars: 100,
         priceTon: 1.0,
+        priceRub: 199,
         duration: '30 дней',
         features: ['Безлимитное скачивание', 'Доступ к эксклюзивам', 'Поддержка авторов']
     },
@@ -18,6 +19,7 @@ const PLANS: SubscriptionPlan[] = [
         name: '1 Год',
         priceStars: 1000,
         priceTon: 10.0,
+        priceRub: 1990,
         duration: '365 дней',
         features: ['Все преимущества', 'Выгоднее на 20%', 'Золотой бейдж']
     }
@@ -129,6 +131,48 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
         }
     };
 
+    const handleYooMoneyPayment = async () => {
+        if (!user) return;
+        setIsLoading(true);
+        try {
+            // Создаем ссылку на оплату
+            const response = await fetch(`${API_BASE_URL}/api/payment/create-yoomoney-link`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: user.id,
+                    plan_id: selectedPlan.id,
+                    promo_code: appliedPromo?.code || null,
+                    amount: 0 // Цена определяется на сервере
+                })
+            });
+
+            if (!response.ok) throw new Error('Failed to create payment link');
+
+            const { payment_link } = await response.json();
+
+            // Открываем ссылку
+            if ((window.Telegram?.WebApp as any)?.openLink) {
+                (window.Telegram.WebApp as any).openLink(payment_link);
+            } else {
+                window.open(payment_link, '_blank');
+            }
+
+            // Показываем инструкцию
+            window.Telegram?.WebApp?.showPopup({
+                title: 'Оплата через ЮMoney',
+                message: 'После успешной оплаты вернитесь в бота. Премиум активируется автоматически в течение минуты.',
+                buttons: [{ type: 'ok' }]
+            });
+
+        } catch (error) {
+            console.error('YooMoney Payment error:', error);
+            window.Telegram?.WebApp?.showAlert('Ошибка при создании ссылки на оплату.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
 
     return (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
@@ -207,23 +251,37 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
                 {/* Кнопки оплаты */}
                 <div className="space-y-3 pt-2">
                     <button
-                        onClick={handleStarsPayment}
+                        onClick={handleYooMoneyPayment}
                         disabled={isLoading}
-                        className="w-full py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                        className="w-full py-4 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
                     >
                         {isLoading ? (
                             <Loader size={20} className="animate-spin" />
                         ) : (
                             <>
-                                <Star size={20} fill="currentColor" />
-                                Оплатить {getDiscountedPrice(selectedPlan.priceStars)} ⭐
-                                {appliedPromo && <span className="text-xs line-through opacity-70 ml-1">{selectedPlan.priceStars}⭐</span>}
+                                <CreditCard size={20} />
+                                Оплатить {selectedPlan.priceRub} ₽
+                            </>
+                        )}
+                    </button>
+
+                    <button
+                        onClick={handleStarsPayment}
+                        disabled={isLoading}
+                        className="w-full py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                    >
+                        {isLoading ? (
+                            <Loader size={18} className="animate-spin" />
+                        ) : (
+                            <>
+                                <Star size={18} fill="currentColor" className="text-yellow-400" />
+                                <span>Telegram Stars ({getDiscountedPrice(selectedPlan.priceStars)} ⭐)</span>
                             </>
                         )}
                     </button>
 
                     <p className="text-center text-xs text-gray-500 mt-2">
-                        Оплата через Telegram Stars
+                        Безопасная оплата картой РФ или кошельком ЮMoney
                     </p>
                 </div>
 
