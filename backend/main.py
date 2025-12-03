@@ -855,8 +855,28 @@ async def create_stars_invoice_with_promo(request: CreateStarsInvoiceRequest, db
 async def create_yoomoney_link_endpoint(request: CreateStarsInvoiceRequest, db: Session = Depends(get_db)):
     """Создание ссылки для оплаты через ЮMoney (P2P)"""
     try:
-        # Определяем цену
+        # Определяем базовую цену
         amount = RUB_PRICE_MONTH if request.plan_id == 'month' else RUB_PRICE_YEAR
+        
+        # Применяем промокод если указан
+        if request.promo_code:
+            promo = db.query(PromoCode).filter(
+                PromoCode.code == request.promo_code.upper(),
+                PromoCode.is_active == True
+            ).first()
+            
+            if promo:
+                # Проверяем срок действия
+                if not promo.expires_at or promo.expires_at > datetime.utcnow():
+                    # Проверяем количество использований
+                    if promo.max_uses == 0 or promo.used_count < promo.max_uses:
+                        # Применяем скидку
+                        if promo.discount_type == 'percent':
+                            amount = int(amount * (1 - promo.value / 100))
+                        elif promo.discount_type == 'fixed':
+                            amount = max(0, int(amount - promo.value))
+                        
+                        print(f"Promo code {promo.code} applied: discount={promo.value}{'%' if promo.discount_type == 'percent' else '₽'}, final_amount={amount}")
         
         # Генерируем ссылку
         link = create_yoomoney_link(request.user_id, request.plan_id, amount)
