@@ -870,6 +870,49 @@ async def create_yoomoney_link_endpoint(request: CreateStarsInvoiceRequest, db: 
         print(f"Error creating YooMoney link: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post("/api/payment/check-promo")
+async def check_promo_code(request: PromoCodeCheck, db: Session = Depends(get_db)):
+    """Проверка промокода"""
+    try:
+        promo = db.query(PromoCode).filter(
+            PromoCode.code == request.code.upper(),
+            PromoCode.is_active == True
+        ).first()
+        
+        if not promo:
+            return {
+                "valid": False,
+                "message": "Промокод не найден"
+            }
+        
+        # Проверка на истечение срока
+        if promo.expires_at and promo.expires_at < datetime.utcnow():
+            return {
+                "valid": False,
+                "message": "Промокод истёк"
+            }
+        
+        # Проверка на количество использований
+        if promo.max_uses > 0 and promo.used_count >= promo.max_uses:
+            return {
+                "valid": False,
+                "message": "Промокод исчерпан"
+            }
+        
+        return {
+            "valid": True,
+            "discount_type": promo.discount_type,
+            "value": promo.value,
+            "message": f"Промокод применён! Скидка: {promo.value}{'%' if promo.discount_type == 'percent' else '₽'}"
+        }
+    except Exception as e:
+        print(f"Error checking promo code: {e}")
+        return {
+            "valid": False,
+            "message": "Ошибка проверки промокода"
+        }
+
 @app.post("/api/webhook/yoomoney")
 async def yoomoney_webhook(request: Request, db: Session = Depends(get_db)):
     """
