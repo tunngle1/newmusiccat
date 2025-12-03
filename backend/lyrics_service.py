@@ -23,9 +23,179 @@ class LyricsService:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
     
+    def _normalize_query(self, text: str) -> str:
+        """
+        Normalize track title or artist name for better search results
+        
+        Args:
+            text: Original text
+            
+        Returns:
+            Normalized text
+        """
+        # Remove common patterns that interfere with search
+        patterns = [
+            r'\(feat\..*?\)',
+            r'\(ft\..*?\)',
+            r'\(featuring.*?\)',
+            r'\[.*?\]',
+            r'\(.*?remix.*?\)',
+            r'\(.*?version.*?\)',
+            r'\(.*?edit.*?\)',
+            r'\(official.*?\)',
+        ]
+        
+        result = text
+        for pattern in patterns:
+            result = re.sub(pattern, '', result, flags=re.IGNORECASE)
+        
+        # Clean up extra spaces
+        result = re.sub(r'\s+', ' ', result).strip()
+        return result
+    
+    def _fetch_from_lyrics_ovh(self, title: str, artist: str) -> Optional[str]:
+        """
+        Fetch lyrics from lyrics.ovh API
+        
+        Args:
+            title: Song title
+            artist: Artist name
+            
+        Returns:
+            Lyrics text or None if not found
+        """
+        try:
+            print(f"Trying lyrics.ovh for: {artist} - {title}")
+            
+            # Normalize inputs
+            normalized_artist = self._normalize_query(artist)
+            normalized_title = self._normalize_query(title)
+            
+            # URL encode the parameters
+            import urllib.parse
+            encoded_artist = urllib.parse.quote(normalized_artist)
+            encoded_title = urllib.parse.quote(normalized_title)
+            
+            url = f"https://api.lyrics.ovh/v1/{encoded_artist}/{encoded_title}"
+            
+            # Increase timeout to 20 seconds
+            response = requests.get(url, timeout=20)
+            
+            if response.status_code == 200:
+                data = response.json()
+                lyrics = data.get('lyrics')
+                
+                if lyrics:
+                    print(f"✅ Found lyrics on lyrics.ovh ({len(lyrics)} chars)")
+                    return lyrics.strip()
+            
+            print(f"❌ No lyrics found on lyrics.ovh (status: {response.status_code})")
+            return None
+            
+        except requests.exceptions.Timeout:
+            print(f"⏱️ lyrics.ovh timeout - server is slow or unavailable")
+            return None
+        except requests.exceptions.ConnectionError:
+            print(f"🔌 lyrics.ovh connection error - check internet connection")
+            return None
+        except Exception as e:
+            print(f"Error fetching from lyrics.ovh: {e}")
+            return None
+    
+    def _fetch_from_duckduckgo(self, title: str, artist: str) -> Optional[str]:
+        """
+        Search for lyrics using DuckDuckGo and parse from first result
+        
+        Args:
+            title: Song title
+            artist: Artist name
+            
+        Returns:
+            Lyrics text or None if not found
+        """
+        try:
+            print(f"Trying DuckDuckGo search for: {artist} - {title}")
+            
+            # Normalize inputs
+            normalized_artist = self._normalize_query(artist)
+            normalized_title = self._normalize_query(title)
+            
+            # Search query
+            query = f"{normalized_artist} {normalized_title} lyrics"
+            
+            # Use DuckDuckGo HTML search
+            import urllib.parse
+            encoded_query = urllib.parse.quote(query)
+            search_url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+            
+            response = requests.get(search_url, headers=headers, timeout=15)
+            
+            if response.status_code != 200:
+                print(f"❌ DuckDuckGo search failed (status: {response.status_code})")
+                return None
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Find first result link
+            result_links = soup.find_all('a', class_='result__a')
+            
+            if not result_links:
+                print("❌ No search results found on DuckDuckGo")
+                return None
+            
+            # Get first result URL
+            first_result_url = result_links[0].get('href')
+            
+            if not first_result_url:
+                print("❌ No URL in first result")
+                return None
+            
+            print(f"Found result: {first_result_url[:100]}...")
+            
+            # Try to fetch and parse lyrics from the page
+            try:
+                page_response = requests.get(first_result_url, headers=headers, timeout=15)
+                
+                if page_response.status_code == 200:
+                    page_soup = BeautifulSoup(page_response.text, 'html.parser')
+                    
+                    # Remove script and style elements
+                    for script in page_soup(["script", "style", "nav", "header", "footer"]):
+                        script.decompose()
+                    
+                    # Try to find lyrics container (common patterns)
+                    lyrics_containers = [
+                        page_soup.find('div', class_=re.compile(r'lyrics', re.IGNORECASE)),
+                        page_soup.find('div', id=re.compile(r'lyrics', re.IGNORECASE)),
+                        page_soup.find('pre'),  # Some sites use <pre> for lyrics
+                    ]
+                    
+                    for container in lyrics_containers:
+                        if container:
+                            text = container.get_text(separator='\n', strip=True)
+                            if len(text) > 100:  # Reasonable lyrics length
+                                cleaned = self._clean_lyrics(text)
+                                if cleaned and len(cleaned) > 100:
+                                    print(f"✅ Found lyrics via DuckDuckGo ({len(cleaned)} chars)")
+                                    return cleaned
+                    
+                    print("❌ Could not extract lyrics from page")
+            except Exception as e:
+                print(f"Error fetching result page: {e}")
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error with DuckDuckGo search: {e}")
+            return None
+    
     def get_lyrics(self, title: str, artist: str) -> Optional[str]:
         """
-        Fetch lyrics for a song from Genius
+        Fetch lyrics for a song from multiple sources (Genius -> lyrics.ovh -> DuckDuckGo)
         
         Args:
             title: Song title
@@ -37,45 +207,68 @@ class LyricsService:
         try:
             print(f"Searching lyrics for: {artist} - {title}")
             
-            # 1. Search for the song
-            search_url = f"{self.base_url}/search"
-            params = {'q': f"{title} {artist}"}
+            # Normalize inputs for better search
+            normalized_title = self._normalize_query(title)
+            normalized_artist = self._normalize_query(artist)
             
-            response = requests.get(search_url, headers=self.headers, params=params, timeout=10)
+            # 1. Try Genius first (if token is available)
+            if self.token:
+                search_url = f"{self.base_url}/search"
+                params = {'q': f"{normalized_title} {normalized_artist}"}
+                
+                try:
+                    response = requests.get(search_url, headers=self.headers, params=params, timeout=10)
+                    
+                    if response.status_code == 429:
+                        print(f"⚠️ Genius API rate limit exceeded (429). Skipping to fallback sources.")
+                    elif response.status_code == 200:
+                        data = response.json()
+                        
+                        if data.get('response') and data['response'].get('hits'):
+                            # Get the first result
+                            song_info = data['response']['hits'][0]['result']
+                            song_url = song_info.get('url')
+                            
+                            if song_url:
+                                print(f"Found song on Genius: {song_info.get('title')} by {song_info.get('primary_artist', {}).get('name')}")
+                                
+                                # 2. Scrape lyrics from the song page
+                                lyrics = self._scrape_lyrics(song_url)
+                                
+                                if lyrics:
+                                    print(f"✅ Successfully fetched lyrics from Genius ({len(lyrics)} chars)")
+                                    return lyrics
+                    else:
+                        print(f"❌ Genius search failed (status: {response.status_code})")
+                except requests.exceptions.Timeout:
+                    print(f"⏱️ Genius API timeout")
+                except Exception as e:
+                    print(f"Error with Genius API: {e}")
             
-            if response.status_code != 200:
-                print(f"Search failed with status {response.status_code}")
-                return None
-            
-            data = response.json()
-            
-            if not data.get('response') or not data['response'].get('hits'):
-                print(f"No results found for: {artist} - {title}")
-                return None
-            
-            # Get the first result
-            song_info = data['response']['hits'][0]['result']
-            song_url = song_info.get('url')
-            
-            if not song_url:
-                print("No song URL found")
-                return None
-            
-            print(f"Found song: {song_info.get('title')} by {song_info.get('primary_artist', {}).get('name')}")
-            
-            # 2. Scrape lyrics from the song page
-            lyrics = self._scrape_lyrics(song_url)
+            # 3. Fallback to lyrics.ovh
+            print("Trying fallback source: lyrics.ovh")
+            lyrics = self._fetch_from_lyrics_ovh(title, artist)
             
             if lyrics:
-                print(f"Successfully fetched lyrics ({len(lyrics)} chars)")
-            else:
-                print("Failed to scrape lyrics from page")
+                return lyrics
             
-            return lyrics
+            # 4. Last resort: DuckDuckGo search
+            print("Trying last resort: DuckDuckGo search")
+            lyrics = self._fetch_from_duckduckgo(title, artist)
+            
+            if lyrics:
+                return lyrics
+            
+            print("❌ All sources exhausted, no lyrics found")
+            return None
             
         except Exception as e:
             print(f"Error fetching lyrics: {e}")
-            return None
+            # Try lyrics.ovh as last resort
+            try:
+                return self._fetch_from_lyrics_ovh(title, artist)
+            except:
+                return None
 
     
     def _scrape_lyrics(self, url: str) -> Optional[str]:
