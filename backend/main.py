@@ -966,6 +966,22 @@ async def yoomoney_webhook(request: Request, db: Session = Depends(get_db)):
             
             if success:
                 print(f"✅ Premium granted to {user_id}")
+                
+                # Отправляем уведомление пользователю в Telegram
+                try:
+                    if BOT_TOKEN:
+                        telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+                        plan_text = "1 месяц" if plan == "month" else "1 год"
+                        message_text = f"🎉 Оплата прошла успешно!\n\n✅ Premium подписка активирована на {plan_text}\n💰 Сумма: {amount}₽\n\nТеперь вам доступны все функции!"
+                        
+                        async with httpx.AsyncClient() as client:
+                            await client.post(telegram_url, json={
+                                'chat_id': user_id,
+                                'text': message_text
+                            })
+                        print(f"📨 Notification sent to user {user_id}")
+                except Exception as e:
+                    print(f"❌ Failed to send notification: {e}")
             else:
                 print(f"❌ Failed to grant premium to {user_id}")
         else:
