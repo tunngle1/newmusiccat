@@ -2406,6 +2406,58 @@ async def delete_promo_code(promo_id: int, user_id: int = Query(...), db: Sessio
     return {"status": "ok"}
 
 
+@app.get("/api/referral/code")
+async def get_referral_code(user_id: int = Query(...), db: Session = Depends(get_db)):
+    """Получение реферального кода и ссылки пользователя"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Генерируем реферальную ссылку
+    # Формат: https://t.me/ВАШ_БОТ?start=ref_USER_ID
+    bot_username = os.getenv("BOT_USERNAME", "your_bot")  # Добавьте BOT_USERNAME в .env
+    referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+    
+    return {
+        "code": f"REF{user_id}",
+        "link": referral_link
+    }
+
+
+@app.get("/api/referral/stats")
+async def get_referral_stats(user_id: int = Query(...), db: Session = Depends(get_db)):
+    """Получение статистики по рефералам"""
+    # Получаем всех рефералов пользователя
+    referrals = db.query(Referral).filter(Referral.referrer_id == user_id).all()
+    
+    total_referrals = len(referrals)
+    completed_referrals = sum(1 for ref in referrals if ref.status == 'completed')
+    pending_referrals = sum(1 for ref in referrals if ref.status == 'pending')
+    
+    # Получаем детальную информацию о рефералах
+    referral_list = []
+    for ref in referrals:
+        referred_user = db.query(User).filter(User.id == ref.referred_id).first()
+        if referred_user:
+            referral_list.append({
+                "id": ref.id,
+                "user_id": referred_user.id,
+                "username": referred_user.username,
+                "first_name": referred_user.first_name,
+                "status": ref.status,
+                "reward_given": ref.reward_given,
+                "created_at": ref.created_at.isoformat() if ref.created_at else None,
+                "completed_at": ref.completed_at.isoformat() if ref.completed_at else None
+            })
+    
+    return {
+        "total_referrals": total_referrals,
+        "completed_referrals": completed_referrals,
+        "pending_referrals": pending_referrals,
+        "referrals": referral_list
+    }
+
+
 @app.delete("/api/admin/user/{user_id}")
 async def delete_user(user_id: int, admin_id: int = Query(...), db: Session = Depends(get_db)):
     """Удаление пользователя из БД (для тестирования)"""
