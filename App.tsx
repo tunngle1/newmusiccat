@@ -908,7 +908,7 @@ const NewDesignApp: React.FC = () => {
                   <div className="aspect-square border-2 border-lebedev-white mb-3 relative overflow-hidden bg-lebedev-white/5">
                     <img
                       src={getCover(track)}
-                      className={`w - full h - full object - cover ${isCoverColor ? '' : 'grayscale'} group - hover: grayscale - 0 transition - all duration - 500`}
+                      className={`w-full h-full object-cover ${isCoverColor ? '' : 'grayscale'} group-hover:grayscale-0 transition-all duration-500`}
                     />
                     <div className="absolute bottom-0 right-0 bg-lebedev-black text-white text-[10px] font-bold px-2 py-1 border-t border-l border-lebedev-white">
                       {formatSeconds(track.duration)}
