@@ -28,6 +28,7 @@ except ImportError:
 
 import os
 from dotenv import load_dotenv
+import httpx
 
 load_dotenv()
 
@@ -1301,7 +1302,7 @@ async def stream_audio(request: Request, url: str = Query(..., description="URL 
 
 class DownloadToChatRequest(BaseModel):
     user_id: int
-    track: Track
+    track: TrackInput
 
 @app.post("/api/download/chat")
 async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends(get_db)):
@@ -1324,11 +1325,19 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
             protect_content = False
         
         print(f"[DOWNLOAD_TO_CHAT] User found: {user is not None}, protect_content: {protect_content}")
-        print(f"[DOWNLOAD_TO_CHAT] Downloading audio from: {request.track.audioUrl[:100]}...")
+        
+        # Обработка URL: если относительный, преобразуем в абсолютный
+        audio_url = request.track.audioUrl
+        if audio_url.startswith('/api/'):
+            # Относительный URL - используем локальный прокси
+            audio_url = f"http://localhost:8000{audio_url}"
+            print(f"[DOWNLOAD_TO_CHAT] Converted relative URL to: {audio_url[:100]}...")
+        
+        print(f"[DOWNLOAD_TO_CHAT] Downloading audio from: {audio_url[:100]}...")
         
         # 1. Download audio file from URL (увеличен timeout для больших файлов)
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            audio_response = await client.get(request.track.audioUrl)
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+            audio_response = await client.get(audio_url)
             audio_response.raise_for_status()
             audio_data = audio_response.content
         
@@ -1345,9 +1354,14 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
         thumbnail_data = None
         if request.track.coverUrl:
             try:
-                print(f"[DOWNLOAD_TO_CHAT] Downloading thumbnail from: {request.track.coverUrl[:100]}...")
-                async with httpx.AsyncClient(timeout=30.0) as thumb_client:
-                    thumb_response = await thumb_client.get(request.track.coverUrl)
+                # Обработка относительных URL для обложки
+                cover_url = request.track.coverUrl
+                if cover_url.startswith('/api/'):
+                    cover_url = f"http://localhost:8000{cover_url}"
+                
+                print(f"[DOWNLOAD_TO_CHAT] Downloading thumbnail from: {cover_url[:100]}...")
+                async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as thumb_client:
+                    thumb_response = await thumb_client.get(cover_url)
                     if thumb_response.status_code == 200:
                         thumbnail_data = thumb_response.content
                         files['thumbnail'] = ('thumb.jpg', thumbnail_data, 'image/jpeg')
