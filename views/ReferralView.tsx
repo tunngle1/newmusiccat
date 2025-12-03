@@ -64,7 +64,8 @@ const ReferralView: React.FC<ReferralViewProps> = ({ onBack }) => {
 
     const copyToClipboard = async () => {
         try {
-            await navigator.clipboard.writeText(referralLink);
+            const inviteText = `🎵 Присоединяйся к лучшему музыкальному боту!\n\n🎁 Получи 3 дня Premium бесплатно при регистрации!\n\n👇 Переходи по ссылке:\n${referralLink}`;
+            await navigator.clipboard.writeText(inviteText);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch (error) {

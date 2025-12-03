@@ -2415,7 +2415,7 @@ async def get_referral_code(user_id: int = Query(...), db: Session = Depends(get
     
     # Генерируем реферальную ссылку
     # Формат: https://t.me/ВАШ_БОТ?start=ref_USER_ID
-    bot_username = os.getenv("BOT_USERNAME", "your_bot")  # Добавьте BOT_USERNAME в .env
+    bot_username = os.getenv("BOT_USERNAME", "your_bot")
     referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
     
     return {
