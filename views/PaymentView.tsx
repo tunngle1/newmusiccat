@@ -209,7 +209,12 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
                         ) : (
                             <>
                                 <CreditCard size={20} />
-                                Оплатить {selectedPlan.priceRub} ₽
+                                Оплатить {getDiscountedPrice(selectedPlan.priceRub)} ₽
+                                {appliedPromo && (
+                                    <span className="ml-2 text-sm line-through opacity-70">
+                                        {selectedPlan.priceRub}₽
+                                    </span>
+                                )}
                             </>
                         )}
                     </button>
