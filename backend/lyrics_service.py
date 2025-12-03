@@ -1,5 +1,5 @@
 """
-Lyrics Service for fetching song lyrics from Genius API
+Lyrics Service for fetching song lyrics from multiple sources
 """
 
 import requests
@@ -9,19 +9,11 @@ from typing import Optional
 
 
 class LyricsService:
-    def __init__(self, genius_token: str):
+    def __init__(self):
         """
-        Initialize Genius API client
-        
-        Args:
-            genius_token: Genius API access token
+        Initialize Lyrics Service (no API tokens required)
         """
-        self.token = genius_token
-        self.base_url = "https://api.genius.com"
-        self.headers = {
-            'Authorization': f'Bearer {self.token}',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
+        pass
     
     def _normalize_query(self, text: str) -> str:
         """
@@ -195,7 +187,7 @@ class LyricsService:
     
     def get_lyrics(self, title: str, artist: str) -> Optional[str]:
         """
-        Fetch lyrics for a song from multiple sources (Genius -> lyrics.ovh -> DuckDuckGo)
+        Fetch lyrics for a song from multiple sources (lyrics.ovh -> DuckDuckGo)
         
         Args:
             title: Song title
@@ -211,49 +203,15 @@ class LyricsService:
             normalized_title = self._normalize_query(title)
             normalized_artist = self._normalize_query(artist)
             
-            # 1. Try Genius first (if token is available)
-            if self.token:
-                search_url = f"{self.base_url}/search"
-                params = {'q': f"{normalized_title} {normalized_artist}"}
-                
-                try:
-                    response = requests.get(search_url, headers=self.headers, params=params, timeout=10)
-                    
-                    if response.status_code == 429:
-                        print(f"⚠️ Genius API rate limit exceeded (429). Skipping to fallback sources.")
-                    elif response.status_code == 200:
-                        data = response.json()
-                        
-                        if data.get('response') and data['response'].get('hits'):
-                            # Get the first result
-                            song_info = data['response']['hits'][0]['result']
-                            song_url = song_info.get('url')
-                            
-                            if song_url:
-                                print(f"Found song on Genius: {song_info.get('title')} by {song_info.get('primary_artist', {}).get('name')}")
-                                
-                                # 2. Scrape lyrics from the song page
-                                lyrics = self._scrape_lyrics(song_url)
-                                
-                                if lyrics:
-                                    print(f"✅ Successfully fetched lyrics from Genius ({len(lyrics)} chars)")
-                                    return lyrics
-                    else:
-                        print(f"❌ Genius search failed (status: {response.status_code})")
-                except requests.exceptions.Timeout:
-                    print(f"⏱️ Genius API timeout")
-                except Exception as e:
-                    print(f"Error with Genius API: {e}")
-            
-            # 3. Fallback to lyrics.ovh
-            print("Trying fallback source: lyrics.ovh")
+            # 1. Try lyrics.ovh first (fast and reliable)
+            print("Trying primary source: lyrics.ovh")
             lyrics = self._fetch_from_lyrics_ovh(title, artist)
             
             if lyrics:
                 return lyrics
             
-            # 4. Last resort: DuckDuckGo search
-            print("Trying last resort: DuckDuckGo search")
+            # 2. Fallback to DuckDuckGo search
+            print("Trying fallback source: DuckDuckGo search")
             lyrics = self._fetch_from_duckduckgo(title, artist)
             
             if lyrics:
@@ -264,9 +222,9 @@ class LyricsService:
             
         except Exception as e:
             print(f"Error fetching lyrics: {e}")
-            # Try lyrics.ovh as last resort
+            # Try DuckDuckGo as last resort
             try:
-                return self._fetch_from_lyrics_ovh(title, artist)
+                return self._fetch_from_duckduckgo(title, artist)
             except:
                 return None
 

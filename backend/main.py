@@ -222,19 +222,13 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     print("WARNING: BOT_TOKEN not found in .env file")
 
-# Genius API Token
-GENIUS_API_TOKEN = os.getenv("GENIUS_API_TOKEN")
-if not GENIUS_API_TOKEN:
-    print("WARNING: GENIUS_API_TOKEN not found in .env file")
-
-# Initialize Lyrics Service
+# Initialize Lyrics Service (no API tokens required)
 lyrics_service = None
-if GENIUS_API_TOKEN:
-    try:
-        lyrics_service = LyricsService(GENIUS_API_TOKEN)
-        print("✅ Lyrics service initialized")
-    except Exception as e:
-        print(f"❌ Failed to initialize lyrics service: {e}")
+try:
+    lyrics_service = LyricsService()
+    print("✅ Lyrics service initialized (lyrics.ovh + DuckDuckGo)")
+except Exception as e:
+    print(f"❌ Failed to initialize lyrics service: {e}")
 
 
 
