@@ -3,7 +3,7 @@ FastAPI Backend for Telegram Music Mini App
 """
 
 from fastapi import FastAPI, HTTPException, Query, Depends, Body, BackgroundTasks, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -326,24 +326,7 @@ async def auth_user(user_data: UserAuth, db: Session = Depends(get_db)):
         
     return {"status": "ok", "user": user}
 
-        db.add(user)
-    else:
-        # Обновляем данные если изменились
-        user.username = user_data.username
-        user.first_name = user_data.first_name
-        user.last_name = user_data.last_name
-    
-    # Hardcode admin for owner
-    if user.id == 414153884:
-        user.is_admin = True
-        user.is_premium = True
-        user.is_premium_pro = True
-    
-    db.commit()
-    db.refresh(user)
-    
-    # Проверяем доступ
-    has_access_result, reason, details = has_access(user)
+# Genres endpoint
     
     # Формируем ответ с информацией о подписке
     subscription_status = {
@@ -1073,6 +1056,38 @@ async def search_tracks(
         )
 
 
+@app.get("/api/stream")
+async def stream_audio(url: str = Query(..., description="URL аудио файла для стриминга")):
+    """
+    Прокси-эндпоинт для стриминга аудио файлов
+    Перенаправляет запросы к оригинальным URL hitmo
+    """
+    try:
+        from urllib.parse import unquote
+        decoded_url = unquote(url)
+        
+        print(f"[STREAM] Proxying audio from: {decoded_url}")
+        
+        # Используем httpx для получения аудио
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+            response = await client.get(decoded_url)
+            response.raise_for_status()
+            
+            # Возвращаем аудио с правильными заголовками
+            return Response(
+                content=response.content,
+                media_type=response.headers.get('content-type', 'audio/mpeg'),
+                headers={
+                    'Accept-Ranges': 'bytes',
+                    'Content-Length': str(len(response.content)),
+                    'Cache-Control': 'public, max-age=3600'
+                }
+            )
+    except Exception as e:
+        print(f"[STREAM] Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to stream audio: {str(e)}")
+
+
 @app.get("/api/track/{track_id}", response_model=Track)
 async def get_track(track_id: str):
     """
@@ -1293,7 +1308,10 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
     """
     Download track to users Telegram chat via bot
     """
+    print(f"[DOWNLOAD_TO_CHAT] Received request for user {request.user_id}, track: {request.track.title}")
+    
     if not BOT_TOKEN:
+        print("[DOWNLOAD_TO_CHAT] ERROR: Bot token not configured")
         raise HTTPException(status_code=500, detail="Bot token not configured")
     
     try:
@@ -1305,11 +1323,16 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
         if user and user.is_premium_pro:
             protect_content = False
         
+        print(f"[DOWNLOAD_TO_CHAT] User found: {user is not None}, protect_content: {protect_content}")
+        print(f"[DOWNLOAD_TO_CHAT] Downloading audio from: {request.track.audioUrl[:100]}...")
+        
         # 1. Download audio file from URL (увеличен timeout для больших файлов)
         async with httpx.AsyncClient(timeout=120.0) as client:
             audio_response = await client.get(request.track.audioUrl)
             audio_response.raise_for_status()
             audio_data = audio_response.content
+        
+        print(f"[DOWNLOAD_TO_CHAT] Audio downloaded: {len(audio_data)} bytes")
         
         # 2. Send to Telegram
         telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendAudio"
@@ -1322,13 +1345,15 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
         thumbnail_data = None
         if request.track.coverUrl:
             try:
+                print(f"[DOWNLOAD_TO_CHAT] Downloading thumbnail from: {request.track.coverUrl[:100]}...")
                 async with httpx.AsyncClient(timeout=30.0) as thumb_client:
                     thumb_response = await thumb_client.get(request.track.coverUrl)
                     if thumb_response.status_code == 200:
                         thumbnail_data = thumb_response.content
                         files['thumbnail'] = ('thumb.jpg', thumbnail_data, 'image/jpeg')
+                        print(f"[DOWNLOAD_TO_CHAT] Thumbnail downloaded: {len(thumbnail_data)} bytes")
             except Exception as e:
-                print(f"Failed to download thumbnail: {e}")
+                print(f"[DOWNLOAD_TO_CHAT] Failed to download thumbnail: {e}")
         
         data = {
             'chat_id': request.user_id,
@@ -1338,6 +1363,8 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
             'protect_content': protect_content  # Premium Pro может пересылать
         }
         
+        print(f"[DOWNLOAD_TO_CHAT] Sending to Telegram API...")
+        
         # 2. Send to Telegram (увеличен timeout для загрузки больших файлов)
         async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.post(telegram_url, files=files, data=data)
@@ -1345,6 +1372,7 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
             result = response.json()
         
         message_id = result['result']['message_id']
+        print(f"[DOWNLOAD_TO_CHAT] Successfully sent to Telegram, message_id: {message_id}")
         
         # 3. Save to database
         downloaded_msg = DownloadedMessage(

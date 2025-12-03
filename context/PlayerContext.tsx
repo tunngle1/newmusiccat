@@ -464,12 +464,12 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     const handleError = async (e: Event) => {
       console.error("Audio error:", e);
-      
+
       // Try to refresh URL if it fails (likely expired)
       if (currentTrack && retryCount.current < 1) {
         console.log("Attempting to refresh expired URL for:", currentTrack.title);
         retryCount.current++;
-        
+
         try {
           // Construct YouTube URL from ID
           const ytUrl = `https://www.youtube.com/watch?v=${currentTrack.id}`;
@@ -478,7 +478,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: ytUrl })
           });
-          
+
           if (response.ok) {
             const data = await response.json();
             if (data.url) {
@@ -486,10 +486,10 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               // Update current track with new URL
               const updatedTrack = { ...currentTrack, audioUrl: data.url };
               setCurrentTrack(updatedTrack);
-              
+
               // Also update in allTracks if present
               setAllTracks(prev => prev.map(t => t.id === updatedTrack.id ? updatedTrack : t));
-              
+
               // Audio src will update automatically via the main useEffect
               return;
             }
@@ -498,7 +498,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           console.error("Failed to refresh URL:", err);
         }
       }
-      
+
       setIsPlaying(false);
     };
 
@@ -954,6 +954,9 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setDownloadProgress(prev => new Map(prev).set(track.id, 95));
       await storage.saveTrack(track, audioBlob, coverBlob);
 
+      // Mark as downloaded ONLY after successful save
+      setDownloadedTracks(prev => new Set(prev).add(track.id));
+
       // Trigger file download to device
       const url = window.URL.createObjectURL(audioBlob);
       const a = document.createElement('a');
@@ -1010,6 +1013,8 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, [isDownloadingToChat, downloadToChatQueue]);
 
   const processDownloadToChat = async (track: Track) => {
+    console.log('[DOWNLOAD_TO_CHAT] Starting download for track:', track.title);
+    
     try {
       setIsDownloadingToChat(track.id);
 
@@ -1017,14 +1022,23 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
       const userId = user?.id || (import.meta.env.DEV ? 414153884 : null); // Fallback for dev
 
+      console.log('[DOWNLOAD_TO_CHAT] User ID:', userId);
+
       if (!userId) {
-        console.warn('User ID not found, cannot send to chat');
+        console.warn('[DOWNLOAD_TO_CHAT] User ID not found, cannot send to chat');
         // Simulate delay to show UI feedback
         await new Promise(resolve => setTimeout(resolve, 1000));
         return;
       }
 
-      console.log(`Sending track ${track.id} to chat for user ${userId}`);
+      console.log(`[DOWNLOAD_TO_CHAT] Sending track ${track.id} to chat for user ${userId}`);
+      console.log('[DOWNLOAD_TO_CHAT] Track data:', {
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        audioUrl: track.audioUrl?.substring(0, 100) + '...',
+        coverUrl: track.coverUrl?.substring(0, 100) + '...'
+      });
 
       const response = await fetch(`${API_BASE_URL}/api/download/chat`, {
         method: 'POST',
@@ -1035,18 +1049,22 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         })
       });
 
+      console.log('[DOWNLOAD_TO_CHAT] Response status:', response.status);
+
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('[DOWNLOAD_TO_CHAT] Error response:', errorText);
         throw new Error(`Failed to send to chat: ${errorText}`);
       }
 
-      console.log("Successfully sent to chat");
+      const result = await response.json();
+      console.log('[DOWNLOAD_TO_CHAT] Success:', result);
 
       // Add delay to prevent rate limiting (500 errors)
       await new Promise(resolve => setTimeout(resolve, 1500));
 
     } catch (e) {
-      console.error("Download to chat failed:", e);
+      console.error("[DOWNLOAD_TO_CHAT] Error:", e);
       // Also delay on error
       await new Promise(resolve => setTimeout(resolve, 2000));
     } finally {
@@ -1067,8 +1085,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     // Check if already downloaded
     if (downloadedTracks.has(track.id)) return;
 
-    // Immediately add to downloaded tracks (will show with 0% progress)
-    setDownloadedTracks(prev => new Set(prev).add(track.id));
+    // Set initial progress to 0% (but don't mark as downloaded yet)
     setDownloadProgress(prev => new Map(prev).set(track.id, 0));
 
     // Add to allTracks if not present (e.g. from search)
