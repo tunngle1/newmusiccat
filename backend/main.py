@@ -1057,37 +1057,6 @@ async def search_tracks(
         )
 
 
-@app.get("/api/stream")
-async def stream_audio(url: str = Query(..., description="URL аудио файла для стриминга")):
-    """
-    Прокси-эндпоинт для стриминга аудио файлов
-    Перенаправляет запросы к оригинальным URL hitmo
-    """
-    try:
-        from urllib.parse import unquote
-        decoded_url = unquote(url)
-        
-        print(f"[STREAM] Proxying audio from: {decoded_url}")
-        
-        # Используем httpx для получения аудио
-        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-            response = await client.get(decoded_url)
-            response.raise_for_status()
-            
-            # Возвращаем аудио с правильными заголовками
-            return Response(
-                content=response.content,
-                media_type=response.headers.get('content-type', 'audio/mpeg'),
-                headers={
-                    'Accept-Ranges': 'bytes',
-                    'Content-Length': str(len(response.content)),
-                    'Cache-Control': 'public, max-age=3600'
-                }
-            )
-    except Exception as e:
-        print(f"[STREAM] Error: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to stream audio: {str(e)}")
-
 
 @app.get("/api/track/{track_id}", response_model=Track)
 async def get_track(track_id: str):
@@ -1216,7 +1185,7 @@ from fastapi import Request
 from starlette.background import BackgroundTask
 
 @app.get("/api/stream")
-async def stream_audio(request: Request, url: str = Query(..., description="URL аудио файла")):
+async def stream_audio_proxy(request: Request, url: str = Query(..., description="URL аудио файла")):
     """
     Проксирование аудио потока с поддержкой Range requests
     """
