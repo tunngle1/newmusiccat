@@ -724,7 +724,7 @@ const NewDesignApp: React.FC = () => {
   };
 
   const renderTrackItem = (track: Track, index: number, queue?: Track[], playlistContext?: { playlistId: string }) => {
-    const isActive = safeTrack?.id === track.id;
+    const isActive = currentTrack?.id === track.id;
     const isDownloaded = downloadedTracks.has(track.id);
     const progress = downloadProgress.get(track.id);
     const effectiveQueue = queue || allTracksSafe;
