@@ -198,6 +198,7 @@ const NewDesignApp: React.FC = () => {
   const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
   const [swipeCurrentX, setSwipeCurrentX] = useState<number | null>(null);
   const [lastTapTime, setLastTapTime] = useState<number>(0);
+  const [showHeartAnimation, setShowHeartAnimation] = useState(false);
 
   // Update player background color when cover changes (only in color mode)
   useEffect(() => {
@@ -1663,8 +1664,10 @@ const NewDesignApp: React.FC = () => {
       const timeSinceLastTap = now - lastTapTime;
 
       if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
-        // Double tap detected - toggle favorite
+        // Double tap detected - toggle favorite with animation
+        setShowHeartAnimation(true);
         toggleFavorite(safeTrack);
+        setTimeout(() => setShowHeartAnimation(false), 800);
         setLastTapTime(0); // Reset to prevent triple tap
         return;
       }
@@ -1746,6 +1749,42 @@ const NewDesignApp: React.FC = () => {
               }}
             >
               <img src={getCover(safeTrack)} alt={safeTrack.title} className={`w-full h-full object-cover ${isCoverColor ? '' : 'grayscale'} contrast-125`} />
+
+              {/* Heart animation on double tap */}
+              {showHeartAnimation && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="w-32 h-32 animate-heart-fill"
+                    style={{
+                      filter: 'drop-shadow(0 0 20px rgba(255,255,255,0.5))'
+                    }}
+                  >
+                    <defs>
+                      <clipPath id="heart-clip">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                      </clipPath>
+                    </defs>
+                    {/* Empty heart outline */}
+                    <path
+                      d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                      fill="none"
+                      stroke="white"
+                      strokeWidth="1.5"
+                    />
+                    {/* Filling heart */}
+                    <rect
+                      x="0"
+                      y="24"
+                      width="24"
+                      height="24"
+                      fill="white"
+                      clipPath="url(#heart-clip)"
+                      className="animate-heart-fill-rect"
+                    />
+                  </svg>
+                </div>
+              )}
             </div>
           ) : (
             <div className="w-full max-w-[480px] aspect-square border-4 border-lebedev-white shadow-2xl bg-black/70 p-4">
