@@ -2057,52 +2057,53 @@ async def get_youtube_file(url: str, background_tasks: BackgroundTasks, user_id:
         }
         media_type = media_types.get(ext, 'audio/webm')
         
-        # Если это MP3 и есть локальный thumbnail, встроить обложку
-        if ext == '.mp3' and thumbnail_file:
-            try:
-                from mutagen.mp3 import MP3
-                from mutagen.id3 import ID3, APIC
-                
-                print(f"🎨 Embedding cover art from local thumbnail: {thumbnail_file}")
-                
-                # Читаем thumbnail с диска
-                with open(thumbnail_file, 'rb') as thumb_file:
-                    cover_data = thumb_file.read()
-                
-                # Определяем MIME тип по расширению
-                thumb_ext = os.path.splitext(thumbnail_file)[1].lower()
-                mime_types = {
-                    '.jpg': 'image/jpeg',
-                    '.jpeg': 'image/jpeg',
-                    '.png': 'image/png',
-                    '.webp': 'image/webp'
-                }
-                mime_type = mime_types.get(thumb_ext, 'image/jpeg')
-                
-                # Открыть MP3 и добавить обложку
-                audio = MP3(downloaded_file, ID3=ID3)
-                
-                # Добавить или создать ID3 теги
-                try:
-                    audio.add_tags()
-                except Exception:
-                    pass  # Теги уже есть
-                
-                # Добавить обложку
-                audio.tags.add(
-                    APIC(
-                        encoding=3,  # UTF-8
-                        mime=mime_type,
-                        type=3,  # Cover (front)
-                        desc='Cover',
-                        data=cover_data
-                    )
-                )
-                
-                audio.save()
-                print(f"✅ Cover art embedded successfully")
-            except Exception as e:
-                print(f"⚠️ Failed to embed cover art: {e}")
+        # Встраивание обложки в MP3 отключено для скачивания в приложение
+        # Браузер не умеет читать ID3 теги из Blob, обложка скачивается отдельно
+        # if ext == '.mp3' and thumbnail_file:
+        #     try:
+        #         from mutagen.mp3 import MP3
+        #         from mutagen.id3 import ID3, APIC
+        #         
+        #         print(f"🎨 Embedding cover art from local thumbnail: {thumbnail_file}")
+        #         
+        #         # Читаем thumbnail с диска
+        #         with open(thumbnail_file, 'rb') as thumb_file:
+        #             cover_data = thumb_file.read()
+        #         
+        #         # Определяем MIME тип по расширению
+        #         thumb_ext = os.path.splitext(thumbnail_file)[1].lower()
+        #         mime_types = {
+        #             '.jpg': 'image/jpeg',
+        #             '.jpeg': 'image/jpeg',
+        #             '.png': 'image/png',
+        #             '.webp': 'image/webp'
+        #         }
+        #         mime_type = mime_types.get(thumb_ext, 'image/jpeg')
+        #         
+        #         # Открыть MP3 и добавить обложку
+        #         audio = MP3(downloaded_file, ID3=ID3)
+        #         
+        #         # Добавить или создать ID3 теги
+        #         try:
+        #             audio.add_tags()
+        #         except Exception:
+        #             pass  # Теги уже есть
+        #         
+        #         # Добавить обложку
+        #         audio.tags.add(
+        #             APIC(
+        #                 encoding=3,  # UTF-8
+        #                 mime=mime_type,
+        #                 type=3,  # Cover (front)
+        #                 desc='Cover',
+        #                 data=cover_data
+        #             )
+        #         )
+        #         
+        #         audio.save()
+        #         print(f"✅ Cover art embedded successfully")
+        #     except Exception as e:
+        #         print(f"⚠️ Failed to embed cover art: {e}")
         
         def cleanup():
             try:
