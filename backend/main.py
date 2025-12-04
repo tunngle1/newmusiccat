@@ -1635,13 +1635,16 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
         
         # Premium Pro может пересылать треки, обычные пользователи - нет
         protect_content = True
-        if user and user.is_premium_pro:
+        if user and (user.is_admin or user.is_premium_pro):
             protect_content = False
         
         print(f"[DOWNLOAD_TO_CHAT] User found: {user is not None}, protect_content: {protect_content}")
         
         # Обработка URL: если относительный, преобразуем в абсолютный
         audio_url = request.track.audioUrl
+        if audio_url:
+            audio_url = audio_url.strip().replace('\n', '').replace('\r', '')
+            
         if audio_url.startswith('/api/'):
             # Относительный URL - используем локальный прокси
             audio_url = f"http://localhost:8000{audio_url}"
@@ -2141,13 +2144,18 @@ async def youtube_download_to_chat(request: dict, db: Session = Depends(get_db))
         
         telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendAudio"
         
+        # Check if user can forward messages (Premium Pro or Admin)
+        user = db.query(User).filter(User.id == user_id).first()
+        can_forward = user and (user.is_admin or user.is_premium_pro)
+        
         with open(downloaded_file, 'rb') as audio_file:
             files = {'audio': audio_file}
             data = {
                 'chat_id': user_id,
                 'title': track_title,
                 'performer': track_artist,
-                'caption': f'🎵 {track_artist} - {track_title}'
+                'caption': f'🎵 {track_artist} - {track_title}',
+                'protect_content': not can_forward  # True if cannot forward
             }
             
             async with httpx.AsyncClient(timeout=300.0) as client:

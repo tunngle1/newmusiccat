@@ -898,7 +898,8 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }, 500);
 
         try {
-          const downloadUrl = `${API_BASE_URL}/api/youtube/download_file?url=${encodeURIComponent(track.audioUrl)}`;
+          const userId = user?.id || 0;
+          const downloadUrl = `${API_BASE_URL}/api/youtube/download_file?url=${encodeURIComponent(track.audioUrl)}&user_id=${userId}`;
           console.log("Download URL:", downloadUrl);
           audioResponse = await fetch(downloadUrl);
         } finally {

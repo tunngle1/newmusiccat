@@ -145,6 +145,9 @@ class HitmoParser:
                             continue
 
                         # Normalize URL
+                        if url:
+                            url = url.strip().replace('\n', '').replace('\r', '')
+                            
                         if url.startswith('//'):
                             url = f"https:{url}"
                         elif url.startswith('/'):
@@ -320,6 +323,8 @@ class HitmoParser:
                         url = download_el.get('href')
                         if not url:
                             continue
+                            
+                        url = url.strip().replace('\n', '').replace('\r', '')
                             
                         track_id = el.get('data-track-id')
                         if not track_id:
