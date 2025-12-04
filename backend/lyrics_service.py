@@ -152,6 +152,16 @@ class LyricsService:
             elif not first_result_url.startswith('http'):
                 first_result_url = 'https://' + first_result_url
             
+            # Handle DuckDuckGo redirect URLs
+            if 'duckduckgo.com/l/' in first_result_url:
+                # Extract the actual URL from the redirect
+                import urllib.parse
+                parsed = urllib.parse.urlparse(first_result_url)
+                params = urllib.parse.parse_qs(parsed.query)
+                if 'uddg' in params:
+                    first_result_url = urllib.parse.unquote(params['uddg'][0])
+                    print(f"Resolved redirect to: {first_result_url[:100]}...")
+            
             print(f"Found result: {first_result_url[:100]}...")
             
             # Try to fetch and parse lyrics from the page
@@ -162,16 +172,31 @@ class LyricsService:
                     page_soup = BeautifulSoup(page_response.text, 'html.parser')
                     
                     # Remove script and style elements
-                    for script in page_soup(["script", "style", "nav", "header", "footer"]):
+                    for script in page_soup(["script", "style", "nav", "header", "footer", "aside", "form", "button"]):
                         script.decompose()
                     
-                    # Try to find lyrics container (common patterns)
+                    # Try to find lyrics container (common patterns for various sites)
                     lyrics_containers = [
+                        # Genius
+                        page_soup.find('div', {'data-lyrics-container': 'true'}),
+                        page_soup.find('div', class_=re.compile(r'Lyrics__Container', re.IGNORECASE)),
+                        # General lyrics patterns
                         page_soup.find('div', class_=re.compile(r'lyrics', re.IGNORECASE)),
                         page_soup.find('div', id=re.compile(r'lyrics', re.IGNORECASE)),
-                        page_soup.find('pre'),  # Some sites use <pre> for lyrics
+                        # AZLyrics
+                        page_soup.find('div', class_=re.compile(r'ringtone', re.IGNORECASE)),
+                        # Musixmatch
+                        page_soup.find('div', class_=re.compile(r'mxm-lyrics', re.IGNORECASE)),
+                        page_soup.find('span', class_=re.compile(r'lyrics__content', re.IGNORECASE)),
+                        # MetroLyrics / SongLyrics
+                        page_soup.find('div', class_=re.compile(r'lyrics-body', re.IGNORECASE)),
+                        page_soup.find('div', class_=re.compile(r'lyric-body', re.IGNORECASE)),
+                        page_soup.find('p', class_=re.compile(r'verse', re.IGNORECASE)),
+                        # Some sites use <pre> for lyrics
+                        page_soup.find('pre'),
                     ]
                     
+                    # Try each container
                     for container in lyrics_containers:
                         if container:
                             text = container.get_text(separator='\n', strip=True)
@@ -180,6 +205,45 @@ class LyricsService:
                                 if cleaned and len(cleaned) > 100:
                                     print(f"✅ Found lyrics via DuckDuckGo ({len(cleaned)} chars)")
                                     return cleaned
+                    
+                    # Fallback: try to find the largest text block on the page
+                    # This helps with sites that don't use standard selectors
+                    print("⚠️ No standard lyrics container found, trying fallback method...")
+                    all_divs = page_soup.find_all(['div', 'article', 'section'])
+                    
+                    best_candidate = None
+                    max_lyrics_score = 0
+                    
+                    for div in all_divs:
+                        text = div.get_text(separator='\n', strip=True)
+                        
+                        # Skip if too short
+                        if len(text) < 200:
+                            continue
+                        
+                        # Calculate "lyrics score" based on characteristics
+                        lines = [l.strip() for l in text.split('\n') if l.strip()]
+                        
+                        # Heuristics for lyrics:
+                        # 1. Has multiple short-medium lines (typical for song verses)
+                        short_lines = sum(1 for l in lines if 5 < len(l) < 100)
+                        # 2. Not too many long lines (likely article text)
+                        long_lines = sum(1 for l in lines if len(l) > 200)
+                        # 3. Has some empty lines (verse breaks)
+                        empty_ratio = text.count('\n\n') / max(len(text), 1)
+                        
+                        # Calculate score
+                        score = short_lines * 2 - long_lines * 3 + empty_ratio * 50
+                        
+                        if score > max_lyrics_score and long_lines < 5:
+                            max_lyrics_score = score
+                            best_candidate = text
+                    
+                    if best_candidate:
+                        cleaned = self._clean_lyrics(best_candidate)
+                        if cleaned and len(cleaned) > 100:
+                            print(f"✅ Found lyrics via fallback method ({len(cleaned)} chars)")
+                            return cleaned
                     
                     print("❌ Could not extract lyrics from page")
             except Exception as e:

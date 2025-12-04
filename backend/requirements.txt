@@ -11,3 +11,4 @@ lyricsgenius==3.0.1
 
 yt-dlp
 pytoniq>=0.1.38
+mutagen

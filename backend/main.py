@@ -1998,6 +1998,12 @@ async def get_youtube_file(url: str, background_tasks: BackgroundTasks, user_id:
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }],
+            # Ускорение загрузки
+            'concurrent_fragment_downloads': 4,  # Параллельная загрузка фрагментов
+            'retries': 3,  # Меньше попыток при ошибке
+            'fragment_retries': 3,
+            # Скачать обложку (thumbnail)
+            'writethumbnail': True,
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -2006,6 +2012,7 @@ async def get_youtube_file(url: str, background_tasks: BackgroundTasks, user_id:
             
         # Find the downloaded file (extension may vary)
         downloaded_file = None
+        thumbnail_file = None
         
         # First check if file exists without extension (yt-dlp sometimes does this)
         if os.path.exists(temp_path):
@@ -2019,6 +2026,14 @@ async def get_youtube_file(url: str, background_tasks: BackgroundTasks, user_id:
                     downloaded_file = test_path
                     print(f"📁 Found file with extension: {downloaded_file}")
                     break
+        
+        # Find thumbnail file
+        for thumb_ext in ['.jpg', '.jpeg', '.png', '.webp']:
+            thumb_path = temp_path + thumb_ext
+            if os.path.exists(thumb_path):
+                thumbnail_file = thumb_path
+                print(f"🎨 Found thumbnail: {thumbnail_file}")
+                break
         
         if not downloaded_file:
             # List what's actually in the temp directory for debugging
@@ -2041,6 +2056,53 @@ async def get_youtube_file(url: str, background_tasks: BackgroundTasks, user_id:
             '.mp4': 'audio/mp4'
         }
         media_type = media_types.get(ext, 'audio/webm')
+        
+        # Если это MP3 и есть локальный thumbnail, встроить обложку
+        if ext == '.mp3' and thumbnail_file:
+            try:
+                from mutagen.mp3 import MP3
+                from mutagen.id3 import ID3, APIC
+                
+                print(f"🎨 Embedding cover art from local thumbnail: {thumbnail_file}")
+                
+                # Читаем thumbnail с диска
+                with open(thumbnail_file, 'rb') as thumb_file:
+                    cover_data = thumb_file.read()
+                
+                # Определяем MIME тип по расширению
+                thumb_ext = os.path.splitext(thumbnail_file)[1].lower()
+                mime_types = {
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.png': 'image/png',
+                    '.webp': 'image/webp'
+                }
+                mime_type = mime_types.get(thumb_ext, 'image/jpeg')
+                
+                # Открыть MP3 и добавить обложку
+                audio = MP3(downloaded_file, ID3=ID3)
+                
+                # Добавить или создать ID3 теги
+                try:
+                    audio.add_tags()
+                except Exception:
+                    pass  # Теги уже есть
+                
+                # Добавить обложку
+                audio.tags.add(
+                    APIC(
+                        encoding=3,  # UTF-8
+                        mime=mime_type,
+                        type=3,  # Cover (front)
+                        desc='Cover',
+                        data=cover_data
+                    )
+                )
+                
+                audio.save()
+                print(f"✅ Cover art embedded successfully")
+            except Exception as e:
+                print(f"⚠️ Failed to embed cover art: {e}")
         
         def cleanup():
             try:
@@ -2117,6 +2179,12 @@ async def youtube_download_to_chat(request: dict, db: Session = Depends(get_db))
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }],
+            # Ускорение загрузки
+            'concurrent_fragment_downloads': 4,
+            'retries': 3,
+            'fragment_retries': 3,
+            # Скачать обложку
+            'writethumbnail': True,
         }
         
         # Download the audio
@@ -2124,13 +2192,23 @@ async def youtube_download_to_chat(request: dict, db: Session = Depends(get_db))
             info = ydl.extract_info(youtube_url, download=True)
             print(f"✅ YouTube download complete")
         
-        # Find the downloaded MP3 file
+        # Find the downloaded MP3 file and thumbnail
         downloaded_file = None
+        thumbnail_file = None
+        
         for ext in ['.mp3', '.webm', '.m4a', '.opus', '.mp4']:
             test_path = temp_path + ext
             if os.path.exists(test_path):
                 downloaded_file = test_path
                 print(f"📁 Found file: {downloaded_file}")
+                break
+        
+        # Find thumbnail file
+        for thumb_ext in ['.jpg', '.jpeg', '.png', '.webp']:
+            thumb_path = temp_path + thumb_ext
+            if os.path.exists(thumb_path):
+                thumbnail_file = thumb_path
+                print(f"🎨 Found thumbnail: {thumbnail_file}")
                 break
         
         if not downloaded_file:
@@ -2148,13 +2226,21 @@ async def youtube_download_to_chat(request: dict, db: Session = Depends(get_db))
         user = db.query(User).filter(User.id == user_id).first()
         can_forward = user and (user.is_admin or user.is_premium_pro)
         
+        # Подготовить thumbnail для отправки (если есть локальный файл)
         with open(downloaded_file, 'rb') as audio_file:
             files = {'audio': audio_file}
+            
+            # Добавить thumbnail если есть локальный файл
+            if thumbnail_file:
+                with open(thumbnail_file, 'rb') as thumb_file:
+                    thumbnail_data = thumb_file.read()
+                    files['thumbnail'] = ('thumb.jpg', thumbnail_data, 'image/jpeg')
+                    print(f"📸 Adding thumbnail from local file")
+            
             data = {
                 'chat_id': user_id,
                 'title': track_title,
                 'performer': track_artist,
-                'caption': f'🎵 {track_artist} - {track_title}',
                 'protect_content': not can_forward  # True if cannot forward
             }
             
