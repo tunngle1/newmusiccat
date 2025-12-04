@@ -194,6 +194,11 @@ const NewDesignApp: React.FC = () => {
   // Player background color state
   const [playerBgColor, setPlayerBgColor] = useState('#1a1a1a');
 
+  // Swipe state for track navigation
+  const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
+  const [swipeCurrentX, setSwipeCurrentX] = useState<number | null>(null);
+  const [lastTapTime, setLastTapTime] = useState<number>(0);
+
   // Update player background color when cover changes (only in color mode)
   useEffect(() => {
     if (!isPlayerOpen || !currentTrack) return;
@@ -1652,10 +1657,6 @@ const NewDesignApp: React.FC = () => {
     };
 
     // Swipe handlers for track navigation
-    const [swipeStartX, setSwipeStartX] = React.useState<number | null>(null);
-    const [swipeCurrentX, setSwipeCurrentX] = React.useState<number | null>(null);
-    const [lastTapTime, setLastTapTime] = React.useState<number>(0);
-
     const handleSwipeStart = (e: React.TouchEvent) => {
       // Check for double tap
       const now = Date.now();
