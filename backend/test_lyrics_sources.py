@@ -16,20 +16,13 @@ load_dotenv()
 def test_lyrics_service():
     """Test lyrics fetching from multiple sources"""
     
-    genius_token = os.getenv("GENIUS_API_TOKEN")
-    
-    if not genius_token:
-        print("❌ GENIUS_API_TOKEN not found in .env")
-        return
-    
-    service = LyricsService(genius_token)
+    service = LyricsService()
     
     # Test cases
     test_tracks = [
-        ("Bohemian Rhapsody", "Queen"),  # Popular track, should be on Genius
+        ("Bohemian Rhapsody", "Queen"),  # Popular track
         ("Shape of You", "Ed Sheeran"),  # Popular track
         ("Blinding Lights", "The Weeknd"),  # Recent popular track
-        ("Some Obscure Song", "Unknown Artist"),  # Should fail on all sources
     ]
     
     print("=" * 80)

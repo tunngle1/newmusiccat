@@ -70,8 +70,8 @@ class LyricsService:
             
             url = f"https://api.lyrics.ovh/v1/{encoded_artist}/{encoded_title}"
             
-            # Increase timeout to 20 seconds
-            response = requests.get(url, timeout=20)
+            # Balanced timeout - 10 seconds
+            response = requests.get(url, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
@@ -124,7 +124,14 @@ class LyricsService:
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
             
-            response = requests.get(search_url, headers=headers, timeout=15)
+            response = requests.get(search_url, headers=headers, timeout=5)
+            
+            # Handle 202 status (request accepted but processing)
+            if response.status_code == 202:
+                print("⏱️ DuckDuckGo returned 202, retrying after delay...")
+                import time
+                time.sleep(2)  # Wait 2 seconds
+                response = requests.get(search_url, headers=headers, timeout=5)
             
             if response.status_code != 200:
                 print(f"❌ DuckDuckGo search failed (status: {response.status_code})")
@@ -139,11 +146,27 @@ class LyricsService:
                 print("❌ No search results found on DuckDuckGo")
                 return None
             
-            # Get first result URL
-            first_result_url = result_links[0].get('href')
+            # Filter out YouTube, Spotify, and other non-lyrics sites
+            # Look for actual lyrics sites (Genius, AZLyrics, etc.)
+            first_result_url = None
+            skip_domains = ['youtube.com', 'youtu.be', 'spotify.com', 'apple.com', 'deezer.com', 
+                          'soundcloud.com', 'amazon.com', 'tidal.com']
+            
+            for link in result_links[:5]:  # Check first 5 results
+                url = link.get('href')
+                if not url:
+                    continue
+                    
+                # Skip if it's a music/video platform (not lyrics site)
+                if any(domain in url.lower() for domain in skip_domains):
+                    print(f"⏭️ Skipping {url[:50]}... (music platform)")
+                    continue
+                    
+                first_result_url = url
+                break
             
             if not first_result_url:
-                print("❌ No URL in first result")
+                print("❌ No suitable lyrics site found in search results")
                 return None
             
             # Fix relative URLs from DuckDuckGo
@@ -175,11 +198,28 @@ class LyricsService:
                     for script in page_soup(["script", "style", "nav", "header", "footer", "aside", "form", "button"]):
                         script.decompose()
                     
-                    # Try to find lyrics container (common patterns for various sites)
+                    # For Genius - collect ALL lyrics containers (they split lyrics into multiple divs)
+                    genius_containers = page_soup.find_all('div', {'data-lyrics-container': 'true'})
+                    
+                    if genius_containers:
+                        # Combine all Genius lyrics containers
+                        all_lyrics_parts = []
+                        for container in genius_containers:
+                            text = container.get_text(separator='\n', strip=True)
+                            # Skip if it looks like a description (has quotes and "is" pattern)
+                            if '"' in text[:100] and ' is ' in text[:200]:
+                                continue
+                            all_lyrics_parts.append(text)
+                        
+                        if all_lyrics_parts:
+                            combined_text = '\n\n'.join(all_lyrics_parts)
+                            cleaned = self._clean_lyrics(combined_text)
+                            if cleaned and len(cleaned) > 100:
+                                print(f"✅ Found lyrics via DuckDuckGo/Genius ({len(cleaned)} chars)")
+                                return cleaned
+                    
+                    # Try other lyrics containers
                     lyrics_containers = [
-                        # Genius
-                        page_soup.find('div', {'data-lyrics-container': 'true'}),
-                        page_soup.find('div', class_=re.compile(r'Lyrics__Container', re.IGNORECASE)),
                         # General lyrics patterns
                         page_soup.find('div', class_=re.compile(r'lyrics', re.IGNORECASE)),
                         page_soup.find('div', id=re.compile(r'lyrics', re.IGNORECASE)),
@@ -413,9 +453,21 @@ class LyricsService:
                 'Slovenčina', 'Ελληνικά', 'فارسی', 'Magyar', 'Türkçe', 'Русский (Russian)', 
                 'Română', 'Polski', 'Українська', '日本語', '한국어',
                 'العربية', 'Svenska', 'azərbaycan', 'עברית', 'हिन्दी', 'srpski',
-                'Česky', 'Македонски', 'עברית (Hebrew)'
+                'Česky', 'Македонски', 'עברית (Hebrew)', 'ไทย (Thai)', 'Tiếng Việt', '中文',
+                'Norsk', 'Nederlands', 'Dansk', 'Shqip', 'Suomi', 'Català'
             ]
             if line in garbage_lines:
+                continue
+            
+            # Filter out language labels (e.g., "ไทย (Thai)")
+            if re.match(r'^[\u0E00-\u0E7F]+\s+\([^)]+\)$', line):  # Thai with (Language)
+                continue
+            if re.match(r'^[^\x00-\x7F]+\s+\([^)]+\)$', line):  # Any non-ASCII with (Language)
+                continue
+            
+            # Filter out lines that look like track descriptions from Genius
+            # Example: ""Blinding Lights" serves as the second single..."
+            if line.startswith('"') and ('serves as' in line or 'is the' in line or 'is about' in line):
                 continue
 
             # Filter out bracketed annotations (improved pattern)
