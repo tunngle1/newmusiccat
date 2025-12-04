@@ -1,0 +1,12 @@
+# Автоматическая проверка истекающих подписок
+# Запускать ежедневно в 10:00
+
+# Windows Task Scheduler команда:
+# python "C:\Users\Владислав\Desktop\TG miniapp\tg-music-player — копия — копия\backend\check_expiring_subscriptions.py"
+
+# Или добавить в cron (Linux):
+# 0 10 * * * cd /path/to/backend && python check_expiring_subscriptions.py
+
+# Для тестирования запустите вручную:
+# cd backend
+# python check_expiring_subscriptions.py

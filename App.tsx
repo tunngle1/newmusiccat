@@ -654,7 +654,7 @@ const NewDesignApp: React.FC = () => {
     setIsYoutubeLoading(true);
     setYoutubeTrack(null);
     try {
-      const response = await fetch(`${API_BASE_URL} /api/youtube / info`, {
+      const response = await fetch(`${API_BASE_URL}/api/youtube/info`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: youtubeLink })

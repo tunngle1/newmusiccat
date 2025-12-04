@@ -2028,6 +2028,123 @@ async def get_youtube_file(url: str, background_tasks: BackgroundTasks):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
 
+@app.post("/api/youtube/download-to-chat")
+async def youtube_download_to_chat(request: dict, db: Session = Depends(get_db)):
+    """
+    Download YouTube audio and send to user's Telegram chat
+    """
+    import yt_dlp
+    import os
+    import tempfile
+    
+    try:
+        user_id = request.get('user_id')
+        youtube_url = request.get('url')
+        track_title = request.get('title', 'YouTube Track')
+        track_artist = request.get('artist', 'Unknown Artist')
+        
+        if not user_id or not youtube_url:
+            raise HTTPException(status_code=400, detail="user_id and url are required")
+        
+        print(f"📥 YouTube to chat: {youtube_url} for user {user_id}")
+        
+        # Create temp directory
+        temp_dir = tempfile.mkdtemp()
+        temp_path = os.path.join(temp_dir, 'audio')
+        
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': temp_path,
+            'quiet': False,
+            'no_warnings': False,
+            'socket_timeout': 300,  # 5 minutes timeout
+            'ffmpeg_location': r'C:\ffmpeg-2025-11-27-git-61b034a47c-essentials_build\bin',
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'skip': ['dash', 'hls']
+                }
+            },
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+        }
+        
+        # Download the audio
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(youtube_url, download=True)
+            print(f"✅ YouTube download complete")
+        
+        # Find the downloaded MP3 file
+        downloaded_file = None
+        for ext in ['.mp3', '.webm', '.m4a', '.opus', '.mp4']:
+            test_path = temp_path + ext
+            if os.path.exists(test_path):
+                downloaded_file = test_path
+                print(f"📁 Found file: {downloaded_file}")
+                break
+        
+        if not downloaded_file:
+            files_in_dir = os.listdir(temp_dir) if os.path.exists(temp_dir) else []
+            raise Exception(f"Downloaded file not found. Dir contents: {files_in_dir}")
+        
+        # Send to Telegram
+        BOT_TOKEN = os.getenv("BOT_TOKEN")
+        if not BOT_TOKEN:
+            raise Exception("BOT_TOKEN not configured")
+        
+        telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendAudio"
+        
+        with open(downloaded_file, 'rb') as audio_file:
+            files = {'audio': audio_file}
+            data = {
+                'chat_id': user_id,
+                'title': track_title,
+                'performer': track_artist,
+                'caption': f'🎵 {track_artist} - {track_title}'
+            }
+            
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                response = await client.post(telegram_url, files=files, data=data)
+                
+                if response.status_code != 200:
+                    raise Exception(f"Telegram API error: {response.text}")
+        
+        print(f"✅ Sent to Telegram chat {user_id}")
+        
+        # Track download in database
+        try:
+            download_msg = DownloadedMessage(
+                user_id=user_id,
+                track_id=f"yt_{info.get('id', 'unknown')}",
+                track_title=track_title,
+                track_artist=track_artist
+            )
+            db.add(download_msg)
+            db.commit()
+        except Exception as e:
+            print(f"Warning: Failed to track download: {e}")
+        
+        # Cleanup
+        try:
+            import shutil
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+                print(f"🗑️ Cleaned up: {temp_dir}")
+        except Exception as e:
+            print(f"Error cleaning up: {e}")
+        
+        return {"status": "ok", "message": "Track sent to chat"}
+        
+    except Exception as e:
+        print(f"❌ Error in YouTube to chat: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to send to chat: {str(e)}")
+
 # --- Lyrics Endpoints ---
 
 class LyricsResponse(BaseModel):

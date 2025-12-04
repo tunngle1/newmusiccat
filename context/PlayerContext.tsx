@@ -1070,34 +1070,64 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return;
       }
 
-      console.log(`[DOWNLOAD_TO_CHAT] Sending track ${track.id} to chat for user ${userId}`);
-      console.log('[DOWNLOAD_TO_CHAT] Track data:', {
-        id: track.id,
-        title: track.title,
-        artist: track.artist,
-        audioUrl: track.audioUrl?.substring(0, 100) + '...',
-        coverUrl: track.coverUrl?.substring(0, 100) + '...'
-      });
+      // Check if this is a YouTube track
+      const isYouTube = track.id.startsWith('yt_');
 
-      const response = await fetch(`${API_BASE_URL}/api/download/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          track: track
-        })
-      });
+      if (isYouTube) {
+        console.log(`[DOWNLOAD_TO_CHAT] YouTube track detected, using special endpoint`);
 
-      console.log('[DOWNLOAD_TO_CHAT] Response status:', response.status);
+        const response = await fetch(`${API_BASE_URL}/api/youtube/download-to-chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: userId,
+            url: track.audioUrl,
+            title: track.title,
+            artist: track.artist
+          })
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[DOWNLOAD_TO_CHAT] Error response:', errorText);
-        throw new Error(`Failed to send to chat: ${errorText}`);
+        console.log('[DOWNLOAD_TO_CHAT] YouTube response status:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[DOWNLOAD_TO_CHAT] YouTube error:', errorText);
+          throw new Error(`Failed to send YouTube to chat: ${errorText}`);
+        }
+
+        const result = await response.json();
+        console.log('[DOWNLOAD_TO_CHAT] YouTube success:', result);
+
+      } else {
+        console.log(`[DOWNLOAD_TO_CHAT] Regular track, using standard endpoint`);
+        console.log('[DOWNLOAD_TO_CHAT] Track data:', {
+          id: track.id,
+          title: track.title,
+          artist: track.artist,
+          audioUrl: track.audioUrl?.substring(0, 100) + '...',
+          coverUrl: track.coverUrl?.substring(0, 100) + '...'
+        });
+
+        const response = await fetch(`${API_BASE_URL}/api/download/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: userId,
+            track: track
+          })
+        });
+
+        console.log('[DOWNLOAD_TO_CHAT] Response status:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[DOWNLOAD_TO_CHAT] Error response:', errorText);
+          throw new Error(`Failed to send to chat: ${errorText}`);
+        }
+
+        const result = await response.json();
+        console.log('[DOWNLOAD_TO_CHAT] Success:', result);
       }
-
-      const result = await response.json();
-      console.log('[DOWNLOAD_TO_CHAT] Success:', result);
 
       // Add delay to prevent rate limiting (500 errors)
       await new Promise(resolve => setTimeout(resolve, 1500));
