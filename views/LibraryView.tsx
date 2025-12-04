@@ -3,7 +3,7 @@ import { usePlayer } from '../context/PlayerContext';
 import { Track } from '../types';
 import { API_BASE_URL } from '../constants';
 import { storage } from '../utils/storage';
-import { Loader2, FileAudio, Upload, Music2, Play, Clock } from 'lucide-react';
+import { Loader2, FileAudio, Upload, Music2, Play, Clock, Trash2 } from 'lucide-react';
 
 const LibraryView: React.FC = () => {
   const {
@@ -30,65 +30,6 @@ const LibraryView: React.FC = () => {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [isYoutubeLoading, setIsYoutubeLoading] = useState(false);
   const [foundYoutubeTrack, setFoundYoutubeTrack] = useState<Track | null>(null);
-
-  const handleYoutubeSearch = async () => {
-    if (!youtubeUrl.trim()) return;
-    setIsYoutubeLoading(true);
-    setFoundYoutubeTrack(null);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/youtube/info`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: youtubeUrl })
-      });
-      if (!response.ok) throw new Error('Не удалось найти видео');
-      const trackData = await response.json();
-
-      // Map backend response to Track interface
-      // IMPORTANT: Map 'url' (from backend) to 'audioUrl' (expected by frontend)
-      const track: Track = {
-        ...trackData,
-        audioUrl: trackData.url,
-        coverUrl: trackData.image
-      };
-
-      setFoundYoutubeTrack(track);
-    } catch (e) {
-      alert('Ошибка: ' + e);
-    } finally {
-      setIsYoutubeLoading(false);
-    }
-  };
-
-  const handleYoutubeDownload = async (target: 'app' | 'chat') => {
-    if (!foundYoutubeTrack) return;
-
-    try {
-      if (target === 'app') {
-        // Use downloadTrack from context - it handles progress tracking
-        downloadTrack(foundYoutubeTrack);
-        setYoutubeUrl('');
-        setFoundYoutubeTrack(null);
-      } else {
-        // Download to Chat using context queue
-        downloadToChat(foundYoutubeTrack);
-        alert('Трек добавлен в очередь отправки в чат!');
-        setYoutubeUrl('');
-        setFoundYoutubeTrack(null);
-      }
-    } catch (e) {
-      alert('Ошибка: ' + e);
-    }
-  };
-
-  useEffect(() => {
-    loadLibraryTracks();
-  }, []);
-
-  // Sync library tracks with downloadedTracks and downloadQueue from context
-  useEffect(() => {
-    loadLibraryTracks();
-  }, [downloadedTracks, downloadQueue]);
 
   const loadLibraryTracks = async () => {
     const storedTracks = await storage.getAllTracks();
@@ -142,6 +83,65 @@ const LibraryView: React.FC = () => {
         addTrack(newTrack);
         // Можно также сохранять загруженные файлы в storage, но пока оставим только в памяти
       });
+    }
+  };
+
+  useEffect(() => {
+    loadLibraryTracks();
+  }, []);
+
+  // Sync library tracks with downloadedTracks and downloadQueue from context
+  useEffect(() => {
+    loadLibraryTracks();
+  }, [downloadedTracks, downloadQueue]);
+
+  const handleYoutubeSearch = async () => {
+    if (!youtubeUrl.trim()) return;
+    setIsYoutubeLoading(true);
+    setFoundYoutubeTrack(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/youtube/info`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: youtubeUrl })
+      });
+      if (!response.ok) throw new Error('Не удалось найти видео');
+      const trackData = await response.json();
+
+      // Map backend response to Track interface
+      // IMPORTANT: Map 'url' (from backend) to 'audioUrl' (expected by frontend)
+      const track: Track = {
+        ...trackData,
+        audioUrl: trackData.url,
+        coverUrl: trackData.image
+      };
+
+      setFoundYoutubeTrack(track);
+    } catch (e) {
+      alert('Ошибка: ' + e);
+    } finally {
+      setIsYoutubeLoading(false);
+    }
+  };
+
+  const handleYoutubeDownload = async (target: 'app' | 'chat') => {
+    if (!foundYoutubeTrack) return;
+
+    try {
+      if (target === 'app') {
+        // Use downloadTrack from context - it handles progress tracking
+        downloadTrack(foundYoutubeTrack);
+        setYoutubeUrl('');
+        setFoundYoutubeTrack(null);
+      } else {
+        // Download to Chat using context queue
+        downloadToChat(foundYoutubeTrack);
+        alert('Трек добавлен в очередь отправки в чат!');
+        setYoutubeUrl('');
+        setFoundYoutubeTrack(null);
+      }
+    } catch (e) {
+      alert('Ошибка: ' + e);
     }
   };
 
@@ -309,13 +309,10 @@ const LibraryView: React.FC = () => {
                     <div className="text-xs text-gray-400 truncate">{track.artist}</div>
                   </div>
                   {!isDownloading && !isPending && (
-                    <button onClick={(e) => handleDelete(e, track.id)} className="p-2 text-gray-400 hover:text-red-500 transition-colors">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    <button onClick={(e) => handleDelete(e, track.id)} className="p-2 text-gray-500 hover:text-red-400">
+                      <Trash2 size={20} />
                     </button>
                   )}
-
-
-
                 </div>
               );
             })}
