@@ -31,7 +31,7 @@ import {
   ShuffleIcon,
   LyricsIcon
 } from './components/newdesign/Icons';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, Trash2 } from 'lucide-react';
 import { Visualizer } from './components/newdesign/Visualizer';
 import MarqueeText from './components/MarqueeText';
 import ArtistSelectorModal from './components/ArtistSelectorModal';
@@ -147,7 +147,8 @@ const NewDesignApp: React.FC = () => {
     favoriteRadios,
     toggleFavoriteRadio,
     canDownloadToApp,
-    canDownloadToChat
+    canDownloadToChat,
+    removeDownloadedTrack
   } = usePlayer();
 
   const [activeTab, setActiveTab] = useState<ViewState>(ViewState.HOME);
@@ -838,7 +839,18 @@ const NewDesignApp: React.FC = () => {
               disabled={isDownloaded || progress !== undefined}
             >
               {isDownloaded ? (
-                <CheckIcon className="w-5 h-5 opacity-100" />
+                activeTab === ViewState.LIBRARY ? (
+                  <Trash2
+                    className="w-5 h-5 hover:text-red-500"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeDownloadedTrack(track.id);
+                      showToast('Трек удален');
+                    }}
+                  />
+                ) : (
+                  <CheckIcon className="w-5 h-5 opacity-100" />
+                )
               ) : progress !== undefined ? (
                 <div className="flex gap-0.5 items-center justify-center w-5 h-5">
                   <div className="w-1 h-1 bg-lebedev-red rounded-full jumping-dot"></div>
