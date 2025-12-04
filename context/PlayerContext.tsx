@@ -884,26 +884,26 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       let audioResponse: Response;
 
       // Для YouTube треков используем специальный endpoint
-      // Для YouTube треков используем специальный endpoint
       if (track.id.startsWith('yt_')) {
         console.log("YouTube track detected, using download endpoint");
 
-        // Simulate progress while waiting for backend to download from YouTube
-        // This prevents the UI from looking "stuck" at 0%
-        let fakeProgress = 0;
-        const progressInterval = setInterval(() => {
-          fakeProgress += 2; // Increment by 2% every 500ms
-          if (fakeProgress > 30) fakeProgress = 30; // Cap at 30% until download starts
-          setDownloadProgress(prev => new Map(prev).set(track.id, fakeProgress));
-        }, 500);
+        const userId = user?.id || 0;
+        const downloadUrl = `${API_BASE_URL}/api/youtube/download_file?url=${encodeURIComponent(track.audioUrl)}&user_id=${userId}`;
+        console.log("Download URL:", downloadUrl);
 
-        try {
-          const userId = user?.id || 0;
-          const downloadUrl = `${API_BASE_URL}/api/youtube/download_file?url=${encodeURIComponent(track.audioUrl)}&user_id=${userId}`;
-          console.log("Download URL:", downloadUrl);
-          audioResponse = await fetch(downloadUrl);
-        } finally {
-          clearInterval(progressInterval);
+        // Fetch with progress tracking
+        audioResponse = await fetch(downloadUrl);
+
+        // If we don't have content-length, show indeterminate progress
+        if (!audioResponse.headers.get('content-length')) {
+          let progress = 0;
+          const progressInterval = setInterval(() => {
+            progress = Math.min(progress + 5, 85); // Cap at 85% until we have the full file
+            setDownloadProgress(prev => new Map(prev).set(track.id, progress));
+          }, 300);
+
+          // We'll clear this after the response is fully read below
+          (audioResponse as any).__progressInterval = progressInterval;
         }
       } else {
         // Для остальных треков (включая Hitmo) используем прокси
@@ -955,6 +955,11 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             const progress = Math.min(90, (loaded / total) * 90);
             setDownloadProgress(prev => new Map(prev).set(track.id, progress));
           }
+        }
+
+        // Clear progress interval if it exists (for YouTube without content-length)
+        if ((audioResponse as any).__progressInterval) {
+          clearInterval((audioResponse as any).__progressInterval);
         }
       }
 
