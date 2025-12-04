@@ -1908,6 +1908,13 @@ async def get_youtube_info(request: YouTubeRequest):
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
+            # Используем Android клиент чтобы обойти ограничения YouTube без JS runtime
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'skip': ['dash', 'hls']
+                }
+            },
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
