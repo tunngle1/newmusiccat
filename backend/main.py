@@ -1948,7 +1948,7 @@ async def get_youtube_info(request: YouTubeRequest):
         raise HTTPException(status_code=500, detail=f"Failed to process YouTube link: {str(e)}")
 
 @app.get("/api/youtube/download_file")
-async def get_youtube_file(url: str, user_id: int = Query(...), background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def get_youtube_file(url: str, background_tasks: BackgroundTasks, user_id: int = Query(...), db: Session = Depends(get_db)):
     """
     Download YouTube audio to server temp file and stream it to client
     Requires Premium Pro access
