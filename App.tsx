@@ -1655,9 +1655,7 @@ const NewDesignApp: React.FC = () => {
       <div
         className="absolute top-0 left-0 right-0 bottom-16 pb-safe z-50 flex flex-col animate-in slide-in-from-bottom duration-300 rounded-t-3xl overflow-hidden border-2 border-lebedev-white shadow-[0_-12px_32px_rgba(0,0,0,0.65)] transition-colors duration-700"
         style={{
-          background: isCoverColor
-            ? `linear-gradient(to bottom, ${playerBgColor}, ${playerBgColor}dd, ${playerBgColor}aa)`
-            : '#000000'
+          backgroundColor: isCoverColor ? playerBgColor : '#000000'
         }}
       >
         <div className="p-4 pt-6 flex justify-between items-center shrink-0">
