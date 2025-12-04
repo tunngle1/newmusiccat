@@ -979,26 +979,15 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         throw e;
       }
 
-      // 2. Скачиваем обложку (если есть) - 90-95%
+      // 2. Сохраняем аудио СРАЗУ - 90-95%
       setDownloadProgress(prev => new Map(prev).set(track.id, 90));
-      let coverBlob: Blob | undefined;
-      if (track.coverUrl && !track.coverUrl.includes('ui-avatars.com')) {
-        try {
-          const coverResponse = await fetch(track.coverUrl);
-          if (coverResponse.ok) {
-            coverBlob = await coverResponse.blob();
-          }
-        } catch (e) {
-          console.warn("Failed to download cover:", e);
-        }
-      }
+      await storage.saveTrack(track, audioBlob);
 
-      // 3. Сохраняем всё в базу - 95-100%
-      setDownloadProgress(prev => new Map(prev).set(track.id, 95));
-      await storage.saveTrack(track, audioBlob, coverBlob);
-
-      // Mark as downloaded ONLY after successful save
+      // Mark as downloaded СРАЗУ после сохранения аудио - пользователь может слушать!
       setDownloadedTracks(prev => new Set(prev).add(track.id));
+
+      // 3. Показать 95% и скрыть progress bar
+      setDownloadProgress(prev => new Map(prev).set(track.id, 95));
 
       // Trigger file download to device (skip in Telegram WebApp to avoid iOS download popup errors)
       const isTelegram = Boolean((window as any).Telegram?.WebApp);
@@ -1016,7 +1005,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         console.log("Skipping anchor download inside Telegram WebApp; track saved to IndexedDB");
       }
 
-      // 4. Mark as complete
+      // 4. Mark as complete - прогресс бар исчезает, появляется галочка
       setDownloadProgress(prev => new Map(prev).set(track.id, 100));
 
       // Remove from progress map after a short delay
@@ -1027,6 +1016,23 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           return next;
         });
       }, 1000);
+
+      // 5. Скачиваем обложку В ФОНЕ (не блокируем UI) - 100%+
+      let coverBlob: Blob | undefined;
+      if (track.coverUrl && !track.coverUrl.includes('ui-avatars.com')) {
+        try {
+          console.log("📸 Loading cover in background...");
+          const coverResponse = await fetch(track.coverUrl);
+          if (coverResponse.ok) {
+            coverBlob = await coverResponse.blob();
+            // Обновляем трек с обложкой
+            await storage.saveTrack(track, audioBlob, coverBlob);
+            console.log("✅ Cover loaded and saved");
+          }
+        } catch (e) {
+          console.warn("Failed to download cover in background:", e);
+        }
+      }
 
       setDownloadQueue(prev => prev.slice(1));
     } catch (e) {
