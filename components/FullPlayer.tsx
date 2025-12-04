@@ -215,14 +215,35 @@ const FullPlayer: React.FC<FullPlayerProps> = ({ onCollapse }) => {
     >
       {/* Dynamic Background */}
       <div className="absolute inset-0 z-0">
-        {/* Reduced opacity of black overlay to let color show through */}
-        <div className="absolute inset-0 bg-black/30 z-10" />
-        <img
-          src={coverUrl}
-          alt="Background"
-          className="w-full h-full object-cover blur-3xl scale-110 opacity-40"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 z-20" />
+        {isColorTheme ? (
+          <>
+            {/* Color mode - bright gradient background */}
+            <div
+              className="absolute inset-0 z-10 opacity-90"
+              style={{
+                background: `linear-gradient(to bottom, ${backgroundColor}, ${backgroundColor}dd, ${backgroundColor}aa)`
+              }}
+            />
+            <img
+              src={coverUrl}
+              alt="Background"
+              className="w-full h-full object-cover blur-3xl scale-110 opacity-30"
+            />
+            {/* Subtle overlay for text readability */}
+            <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/20 z-20" />
+          </>
+        ) : (
+          <>
+            {/* Black & White mode - dark background */}
+            <div className="absolute inset-0 bg-black/30 z-10" />
+            <img
+              src={coverUrl}
+              alt="Background"
+              className="w-full h-full object-cover blur-3xl scale-110 opacity-40"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 z-20" />
+          </>
+        )}
       </div>
 
       {/* Content */}
