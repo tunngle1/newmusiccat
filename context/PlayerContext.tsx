@@ -1018,8 +1018,11 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }, 1000);
 
       // 5. Скачиваем обложку В ФОНЕ (не блокируем UI) - 100%+
+      // Пропускаем YouTube обложки - CORS блокирует загрузку с YouTube CDN
       let coverBlob: Blob | undefined;
-      if (track.coverUrl && !track.coverUrl.includes('ui-avatars.com')) {
+      const isYouTubeTrack = track.id.startsWith('yt_');
+
+      if (!isYouTubeTrack && track.coverUrl && !track.coverUrl.includes('ui-avatars.com')) {
         try {
           console.log("📸 Loading cover in background...");
           const coverResponse = await fetch(track.coverUrl);
@@ -1032,6 +1035,8 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         } catch (e) {
           console.warn("Failed to download cover in background:", e);
         }
+      } else if (isYouTubeTrack) {
+        console.log("📸 Skipping cover download for YouTube track (CORS restriction) - will show online via URL");
       }
 
       setDownloadQueue(prev => prev.slice(1));
