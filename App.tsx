@@ -1217,7 +1217,17 @@ const NewDesignApp: React.FC = () => {
 
   const renderLibrary = () => (
     <div className="flex flex-col min-h-full">
-      <div className="p-6 border-b-4 border-lebedev-white bg-lebedev-black">
+      {/* YouTube Section with "Coming Soon" overlay */}
+      <div className="relative p-6 border-b-4 border-lebedev-white bg-lebedev-black">
+        {/* Blurred overlay */}
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-10 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-2xl font-black uppercase tracking-widest text-lebedev-white mb-2">Скоро</div>
+            <div className="text-xs uppercase tracking-widest text-lebedev-gray">Скачивание с YouTube появится позже</div>
+          </div>
+        </div>
+
+        {/* Original YouTube content (blurred behind) */}
         <div className="flex items-center gap-2 mb-4 text-lebedev-red">
           <YoutubeIcon className="w-6 h-6" />
           <span className="text-sm font-black uppercase tracking-widest">YouTube загрузчик</span>
@@ -1230,44 +1240,14 @@ const NewDesignApp: React.FC = () => {
             onChange={(e) => setYoutubeLink(e.target.value)}
             placeholder="Вставьте ссылку..."
             className="w-full bg-transparent border-2 border-lebedev-white p-3 text-sm uppercase placeholder-lebedev-gray/50 focus:outline-none focus:border-lebedev-red font-bold"
+            disabled
           />
           <button
-            onClick={handleYoutubeSearch}
-            disabled={!youtubeLink || isYoutubeLoading}
-            className={`
-              w-full p-4 font-black uppercase tracking-widest text-sm transition-all
-              ${!youtubeLink || isYoutubeLoading ? 'bg-lebedev-gray cursor-not-allowed' : 'bg-lebedev-white text-lebedev-black hover:bg-lebedev-red hover:text-white'}
-            `}
+            disabled
+            className="w-full p-4 font-black uppercase tracking-widest text-sm bg-lebedev-gray cursor-not-allowed"
           >
-            {isYoutubeLoading ? 'Поиск...' : 'Найти'}
+            Найти
           </button>
-          {youtubeTrack && (
-            <div className="border border-lebedev-white/30 p-3 flex items-center gap-3 bg-lebedev-white/5">
-              <img src={getCover(youtubeTrack)} alt="cover" className="w-12 h-12 object-cover border border-lebedev-white/30" />
-              <div className="flex-1 min-w-0">
-                <div className="font-bold uppercase truncate text-sm">{youtubeTrack.title}</div>
-                <div className="text-xs uppercase truncate" style={{ color: '#ef4444' }}>{youtubeTrack.artist}</div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleYoutubeDownload('app')}
-                  className="px-3 py-2 bg-lebedev-white text-lebedev-black font-black uppercase text-xs hover:bg-lebedev-red hover:text-white transition-colors"
-                >
-                  В приложение
-                </button>
-                <button
-                  onClick={() => handleYoutubeDownload('chat')}
-                  disabled={isTrackInChatQueue(youtubeTrack.id)}
-                  className={`px-3 py-2 border border-lebedev-white font-black uppercase text-xs transition-colors ${isTrackInChatQueue(youtubeTrack.id)
-                    ? 'text-lebedev-gray border-lebedev-gray cursor-not-allowed'
-                    : 'text-lebedev-white hover:bg-lebedev-white hover:text-lebedev-black'
-                    }`}
-                >
-                  В чат
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

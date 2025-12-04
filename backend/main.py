@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import uvicorn
+import random
 from sqlalchemy.orm import Session
 from datetime import datetime
 try:
@@ -1903,19 +1904,44 @@ async def get_youtube_info(request: YouTubeRequest):
     try:
         import yt_dlp
         
+        # Получаем зарубежные прокси для YouTube (для обхода блокировки в РФ)
+        youtube_proxy_str = os.getenv("YOUTUBE_PROXY_LIST", "")
+        youtube_proxies = [p.strip() for p in youtube_proxy_str.split(",") if p.strip()]
+        
+        # Путь к файлу куки (если есть)
+        cookies_file = os.path.join(os.path.dirname(__file__), 'cookies.txt')
+        
         ydl_opts = {
             'format': 'bestaudio/best',
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
-            # Используем Android клиент чтобы обойти ограничения YouTube без JS runtime
+            # Используем разные клиенты для обхода ограничений
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'],
+                    'player_client': ['android_creator', 'android', 'web'],
                     'skip': ['dash', 'hls']
                 }
             },
+            'socket_timeout': 30,
+            # Имитация реального браузера
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+            },
         }
+        
+        # Добавляем куки если файл существует
+        if os.path.exists(cookies_file):
+            ydl_opts['cookiefile'] = cookies_file
+            print(f"Using cookies from: {cookies_file}")
+        
+        # Добавляем прокси если есть
+        if youtube_proxies:
+            proxy = random.choice(youtube_proxies)
+            ydl_opts['proxy'] = proxy
+            print(f"Using YouTube proxy: {proxy}")
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(request.url, download=False)
@@ -1981,6 +2007,10 @@ async def get_youtube_file(url: str, background_tasks: BackgroundTasks, user_id:
     try:
         print(f"📥 Starting download for: {url}")
         
+        # Получаем зарубежные прокси для YouTube (для обхода блокировки в РФ)
+        youtube_proxy_str = os.getenv("YOUTUBE_PROXY_LIST", "")
+        youtube_proxies = [p.strip() for p in youtube_proxy_str.split(",") if p.strip()]
+        
         # Create temp directory
         temp_dir = tempfile.mkdtemp()
         temp_path = os.path.join(temp_dir, 'audio')
@@ -2012,6 +2042,12 @@ async def get_youtube_file(url: str, background_tasks: BackgroundTasks, user_id:
             # Скачать обложку (thumbnail)
             'writethumbnail': True,
         }
+        
+        # Добавляем прокси если есть
+        if youtube_proxies:
+            proxy = random.choice(youtube_proxies)
+            ydl_opts['proxy'] = proxy
+            print(f"Using YouTube proxy: {proxy}")
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -2164,6 +2200,10 @@ async def youtube_download_to_chat(request: dict, db: Session = Depends(get_db))
         
         print(f"📥 YouTube to chat: {youtube_url} for user {user_id}")
         
+        # Получаем зарубежные прокси для YouTube (для обхода блокировки в РФ)
+        youtube_proxy_str = os.getenv("YOUTUBE_PROXY_LIST", "")
+        youtube_proxies = [p.strip() for p in youtube_proxy_str.split(",") if p.strip()]
+        
         # Create temp directory
         temp_dir = tempfile.mkdtemp()
         temp_path = os.path.join(temp_dir, 'audio')
@@ -2194,6 +2234,12 @@ async def youtube_download_to_chat(request: dict, db: Session = Depends(get_db))
             # Скачать обложку
             'writethumbnail': True,
         }
+        
+        # Добавляем прокси если есть
+        if youtube_proxies:
+            proxy = random.choice(youtube_proxies)
+            ydl_opts['proxy'] = proxy
+            print(f"Using YouTube proxy: {proxy}")
         
         # Download the audio
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
