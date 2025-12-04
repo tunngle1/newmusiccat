@@ -1018,8 +1018,17 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }, 1000);
 
       // 5. Скачиваем обложку В ФОНЕ (не блокируем UI) - 100%+
+      const isYouTubeTrack = track.id.startsWith('yt_');
       let coverBlob: Blob | undefined;
-      if (track.coverUrl && !track.coverUrl.includes('ui-avatars.com')) {
+      
+      if (isYouTubeTrack) {
+        // YouTube - CORS blocks direct download, just save URL for display
+        console.log(`📸 YouTube track - saving coverUrl: ${track.coverUrl}`);
+        // Update track in DB with coverUrl (no blob)
+        await storage.saveTrack(track, audioBlob, undefined);
+        console.log("✅ YouTube track saved with coverUrl");
+      } else if (track.coverUrl && !track.coverUrl.includes('ui-avatars.com')) {
+        // Regular tracks - download and save cover
         try {
           console.log("📸 Loading cover in background...");
           const coverResponse = await fetch(track.coverUrl);

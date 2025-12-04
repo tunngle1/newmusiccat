@@ -1651,6 +1651,53 @@ const NewDesignApp: React.FC = () => {
       }
     };
 
+    // Swipe handlers for track navigation
+    const [swipeStartX, setSwipeStartX] = React.useState<number | null>(null);
+    const [swipeCurrentX, setSwipeCurrentX] = React.useState<number | null>(null);
+    const [lastTapTime, setLastTapTime] = React.useState<number>(0);
+
+    const handleSwipeStart = (e: React.TouchEvent) => {
+      // Check for double tap
+      const now = Date.now();
+      const timeSinceLastTap = now - lastTapTime;
+
+      if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
+        // Double tap detected - toggle favorite
+        toggleFavorite(safeTrack);
+        setLastTapTime(0); // Reset to prevent triple tap
+        return;
+      }
+
+      setLastTapTime(now);
+      setSwipeStartX(e.touches[0].clientX);
+      setSwipeCurrentX(e.touches[0].clientX);
+    };
+
+    const handleSwipeMove = (e: React.TouchEvent) => {
+      if (swipeStartX !== null) {
+        setSwipeCurrentX(e.touches[0].clientX);
+      }
+    };
+
+    const handleSwipeEnd = () => {
+      if (swipeStartX !== null && swipeCurrentX !== null) {
+        const diff = swipeCurrentX - swipeStartX;
+        const threshold = 100; // Minimum swipe distance
+
+        if (Math.abs(diff) > threshold) {
+          if (diff > 0) {
+            // Swipe right → previous track
+            prevTrack();
+          } else {
+            // Swipe left → next track
+            nextTrack();
+          }
+        }
+      }
+      setSwipeStartX(null);
+      setSwipeCurrentX(null);
+    };
+
     return (
       <div
         className="absolute top-0 left-0 right-0 bottom-16 pb-safe z-50 flex flex-col animate-in slide-in-from-bottom duration-300 rounded-t-3xl overflow-hidden border-2 border-lebedev-white shadow-[0_-12px_32px_rgba(0,0,0,0.65)] transition-colors duration-700"
@@ -1685,7 +1732,18 @@ const NewDesignApp: React.FC = () => {
 
         <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden">
           {!showLyrics ? (
-            <div className="w-full max-w-[480px] aspect-square relative shadow-2xl border-4 border-lebedev-white">
+            <div
+              className="w-full max-w-[480px] aspect-square relative shadow-2xl border-4 border-lebedev-white"
+              onTouchStart={handleSwipeStart}
+              onTouchMove={handleSwipeMove}
+              onTouchEnd={handleSwipeEnd}
+              style={{
+                transform: swipeStartX !== null && swipeCurrentX !== null
+                  ? `translateX(${(swipeCurrentX - swipeStartX) * 0.3}px)`
+                  : 'none',
+                transition: swipeStartX === null ? 'transform 0.3s ease-out' : 'none'
+              }}
+            >
               <img src={getCover(safeTrack)} alt={safeTrack.title} className={`w-full h-full object-cover ${isCoverColor ? '' : 'grayscale'} contrast-125`} />
             </div>
           ) : (
@@ -1941,7 +1999,10 @@ const NewDesignApp: React.FC = () => {
           {miniTrack && !isPlayerOpen && (
             <div
               onClick={() => setIsPlayerOpen(prev => !prev)}
-              className="bg-black border-t-2 border-lebedev-white cursor-pointer transition-colors text-white shadow-[0_-12px_32px_rgba(0,0,0,0.65)]"
+              className="border-t-2 border-lebedev-white cursor-pointer transition-colors text-white shadow-[0_-12px_32px_rgba(0,0,0,0.65)]"
+              style={{
+                backgroundColor: isCoverColor ? playerBgColor : '#000000'
+              }}
             >
               <div className="w-full h-1 bg-gray-800 relative">
                 <div className="h-full bg-lebedev-red" style={{ width: `${progressPercent}%` }} />
@@ -2000,7 +2061,12 @@ const NewDesignApp: React.FC = () => {
           )}
 
           {activeTab !== ViewState.ADMIN && activeTab !== ViewState.SUBSCRIPTION && (
-            <nav className="h-16 bg-black border-t-2 border-lebedev-white grid grid-cols-5 pb-safe shadow-[0_-12px_32px_rgba(0,0,0,0.65)]">
+            <nav
+              className="h-16 border-t-2 border-lebedev-white grid grid-cols-5 pb-safe shadow-[0_-12px_32px_rgba(0,0,0,0.65)] transition-colors duration-700"
+              style={{
+                backgroundColor: isCoverColor && miniTrack ? playerBgColor : '#000000'
+              }}
+            >
               {[
                 { id: ViewState.HOME, icon: HomeIcon, label: 'Главная' },
                 { id: ViewState.PLAYLISTS, icon: PlaylistIcon, label: 'Плейлисты' },
