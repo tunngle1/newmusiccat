@@ -280,13 +280,6 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({ onBack, userId }) =
                     <Crown className="w-6 h-6" />
                     {subscriptionStatus?.has_access ? 'ПРОДЛИТЬ ПОДПИСКУ' : 'ОФОРМИТЬ ПОДПИСКУ'}
                 </button>
-
-                {/* Info */}
-                <div className="text-xs text-gray-500 text-center space-y-1">
-                    <div>Оплата через Tribute.tg</div>
-                    <div>Подписка продлевается автоматически</div>
-                    <div>Отменить можно в любой момент</div>
-                </div>
             </div>
         </div>
     );
