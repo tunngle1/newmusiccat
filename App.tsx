@@ -191,6 +191,26 @@ const NewDesignApp: React.FC = () => {
   const [referralCode, setReferralCode] = useState<ReferralCode | null>(null);
   const [isReferralLoading, setIsReferralLoading] = useState(false);
 
+  // Player background color state
+  const [playerBgColor, setPlayerBgColor] = useState('#1a1a1a');
+
+  // Update player background color when cover changes (only in color mode)
+  useEffect(() => {
+    if (!isPlayerOpen || !currentTrack) return;
+
+    const coverUrl = getCover(currentTrack);
+    if (isCoverColor && coverUrl) {
+      import('./utils/colors').then(({ getDominantColor }) => {
+        getDominantColor(coverUrl).then(color => {
+          setPlayerBgColor(color);
+        });
+      });
+    } else {
+      // Black & White mode - use default dark color
+      setPlayerBgColor('#1a1a1a');
+    }
+  }, [isPlayerOpen, currentTrack, isCoverColor]);
+
   const fetchReferralData = async () => {
     if (!user) return;
     setIsReferralLoading(true);
@@ -1632,7 +1652,14 @@ const NewDesignApp: React.FC = () => {
     };
 
     return (
-      <div className="absolute top-0 left-0 right-0 bottom-16 pb-safe z-50 bg-black flex flex-col animate-in slide-in-from-bottom duration-300 rounded-t-3xl overflow-hidden border-2 border-lebedev-white shadow-[0_-12px_32px_rgba(0,0,0,0.65)]">
+      <div
+        className="absolute top-0 left-0 right-0 bottom-16 pb-safe z-50 flex flex-col animate-in slide-in-from-bottom duration-300 rounded-t-3xl overflow-hidden border-2 border-lebedev-white shadow-[0_-12px_32px_rgba(0,0,0,0.65)] transition-colors duration-700"
+        style={{
+          background: isCoverColor
+            ? `linear-gradient(to bottom, ${playerBgColor}, ${playerBgColor}dd, ${playerBgColor}aa)`
+            : '#000000'
+        }}
+      >
         <div className="p-4 pt-6 flex justify-between items-center shrink-0">
           <button onClick={() => setIsPlayerOpen(false)} className="text-lebedev-white hover:text-lebedev-red transition-colors">
             <ChevronDownIcon className="w-8 h-8" />
