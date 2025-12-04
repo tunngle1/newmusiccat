@@ -278,13 +278,22 @@ def has_access(user: User) -> tuple[bool, str, dict]:
         return False, "blocked", {}
     
     if user.is_admin:
-        return True, "admin", {}
+        return True, "admin", {
+            "is_premium": True,
+            "premium_expires_at": user.premium_expires_at.isoformat() if user.premium_expires_at else None
+        }
     
     if user.is_premium_pro:
-        return True, "premium_pro", {}
+        return True, "premium_pro", {
+            "is_premium": True,
+            "premium_expires_at": user.premium_expires_at.isoformat() if user.premium_expires_at else None
+        }
     
     if user.is_premium:
-        return True, "premium", {}
+        return True, "premium", {
+            "is_premium": True,
+            "premium_expires_at": user.premium_expires_at.isoformat() if user.premium_expires_at else None
+        }
     
     # Проверка пробного периода
     if user.trial_expires_at:
@@ -297,6 +306,28 @@ def has_access(user: User) -> tuple[bool, str, dict]:
             }
     
     return False, "expired", {}
+
+def can_download_to_app(user: User) -> bool:
+    """
+    Проверяет, может ли пользователь скачивать треки в приложение.
+    Доступно для Premium и выше.
+    """
+    has_access_result, _, _ = has_access(user)
+    return has_access_result
+
+def can_download_to_chat(user: User) -> bool:
+    """
+    Проверяет, может ли пользователь скачивать треки в чат.
+    Доступно для всех пользователей.
+    """
+    return True  # Все могут скачивать в чат
+
+def can_forward_from_chat(user: User) -> bool:
+    """
+    Проверяет, может ли пользователь пересылать сообщения из чата.
+    Доступно только для Premium Pro и админов.
+    """
+    return user.is_admin or user.is_premium_pro
 
 # --- User & Admin Endpoints ---
 
@@ -1917,10 +1948,22 @@ async def get_youtube_info(request: YouTubeRequest):
         raise HTTPException(status_code=500, detail=f"Failed to process YouTube link: {str(e)}")
 
 @app.get("/api/youtube/download_file")
-async def get_youtube_file(url: str, background_tasks: BackgroundTasks):
+async def get_youtube_file(url: str, user_id: int = Query(...), background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Download YouTube audio to server temp file and stream it to client
+    Requires Premium Pro access
     """
+    # Check Premium Pro access
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if not can_download_to_app(user):
+        raise HTTPException(
+            status_code=403, 
+            detail="Premium required. Subscribe to download tracks to your device."
+        )
+    
     import yt_dlp
     import os
     import tempfile
@@ -2119,9 +2162,9 @@ async def youtube_download_to_chat(request: dict, db: Session = Depends(get_db))
         try:
             download_msg = DownloadedMessage(
                 user_id=user_id,
-                track_id=f"yt_{info.get('id', 'unknown')}",
-                track_title=track_title,
-                track_artist=track_artist
+                chat_id=user_id,
+                message_id=0,  # We don't have message_id yet
+                track_id=f"yt_{info.get('id', 'unknown')}"
             )
             db.add(download_msg)
             db.commit()

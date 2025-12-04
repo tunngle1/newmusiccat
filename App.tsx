@@ -145,7 +145,9 @@ const NewDesignApp: React.FC = () => {
     favorites,
     toggleFavorite,
     favoriteRadios,
-    toggleFavoriteRadio
+    toggleFavoriteRadio,
+    canDownloadToApp,
+    canDownloadToChat
   } = usePlayer();
 
   const [activeTab, setActiveTab] = useState<ViewState>(ViewState.HOME);

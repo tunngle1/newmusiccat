@@ -74,6 +74,9 @@ interface PlayerContextType {
   downloadToChatQueue: Track[];
   isDownloadingToChat: string | null;
   downloadToChat: (track: Track) => void;
+  // Premium Pro Access Helpers
+  canDownloadToApp: () => boolean;
+  canDownloadToChat: () => boolean;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
@@ -1232,7 +1235,13 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       markTrackAsDownloaded,
       downloadToChatQueue,
       isDownloadingToChat,
-      downloadToChat
+      downloadToChat,
+      canDownloadToApp: () => {
+        return user?.subscription_status?.has_access || false;
+      },
+      canDownloadToChat: () => {
+        return true; // Все могут скачивать в чат
+      }
     }}>
       {children}
     </PlayerContext.Provider>
