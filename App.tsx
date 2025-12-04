@@ -829,38 +829,41 @@ const NewDesignApp: React.FC = () => {
             >
               <SendIcon className="w-5 h-5" />
             </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDownloadToApp(track);
-              }}
-              className="p-1.5 rounded-full hover:bg-lebedev-red hover:text-white transition-colors text-gray-200"
-              title="Скачать в приложение"
-              disabled={isDownloaded || progress !== undefined}
-            >
-              {isDownloaded ? (
-                activeTab === ViewState.LIBRARY ? (
-                  <Trash2
-                    className="w-5 h-5 hover:text-red-500"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeDownloadedTrack(track.id);
-                      showToast('Трек удален');
-                    }}
-                  />
-                ) : (
+            {activeTab === ViewState.LIBRARY && isDownloaded ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeDownloadedTrack(track.id);
+                  showToast('Трек удален');
+                }}
+                className="p-1.5 rounded-full hover:bg-lebedev-red hover:text-white transition-colors text-gray-200"
+                title="Удалить"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownloadToApp(track);
+                }}
+                className="p-1.5 rounded-full hover:bg-lebedev-red hover:text-white transition-colors text-gray-200"
+                title="Скачать в приложение"
+                disabled={isDownloaded || progress !== undefined}
+              >
+                {isDownloaded ? (
                   <CheckIcon className="w-5 h-5 opacity-100" />
-                )
-              ) : progress !== undefined ? (
-                <div className="flex gap-0.5 items-center justify-center w-5 h-5">
-                  <div className="w-1 h-1 bg-lebedev-red rounded-full jumping-dot"></div>
-                  <div className="w-1 h-1 bg-lebedev-red rounded-full jumping-dot"></div>
-                  <div className="w-1 h-1 bg-lebedev-red rounded-full jumping-dot"></div>
-                </div>
-              ) : (
-                <DownloadIcon className="w-5 h-5" />
-              )}
-            </button>
+                ) : progress !== undefined ? (
+                  <div className="flex gap-0.5 items-center justify-center w-5 h-5">
+                    <div className="w-1 h-1 bg-lebedev-red rounded-full jumping-dot"></div>
+                    <div className="w-1 h-1 bg-lebedev-red rounded-full jumping-dot"></div>
+                    <div className="w-1 h-1 bg-lebedev-red rounded-full jumping-dot"></div>
+                  </div>
+                ) : (
+                  <DownloadIcon className="w-5 h-5" />
+                )}
+              </button>
+            )}
           </div>
         </div>
 
