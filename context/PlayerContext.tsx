@@ -28,7 +28,7 @@ interface PlayerContextType {
   prevTrack: () => void;
   seek: (time: number) => void;
   addTrack: (track: Track) => void;
-  createPlaylist: (name: string, coverFile?: File) => void;
+  createPlaylist: (name: string, coverFile?: File) => string;
   addToPlaylist: (playlistId: string, track: Track) => void;
   toggleRepeat: () => void;
   toggleShuffle: () => void;
@@ -767,9 +767,10 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setQueue(prev => [track, ...prev]);
   };
 
-  const createPlaylist = (name: string, coverFile?: File) => {
+  const createPlaylist = (name: string, coverFile?: File): string => {
+    const newPlaylistId = Date.now().toString();
     const newPlaylist: Playlist = {
-      id: Date.now().toString(),
+      id: newPlaylistId,
       name,
       coverUrl: coverFile
         ? URL.createObjectURL(coverFile)
@@ -786,6 +787,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         console.error("Ошибка при сохранении плейлиста");
       }
     });
+    return newPlaylistId;
   };
 
   const addToPlaylist = async (playlistId: string, track: Track) => {
@@ -1020,7 +1022,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       // 5. Скачиваем обложку В ФОНЕ (не блокируем UI) - 100%+
       const isYouTubeTrack = track.id.startsWith('yt_');
       let coverBlob: Blob | undefined;
-      
+
       if (isYouTubeTrack) {
         // YouTube - CORS blocks direct download, just save URL for display
         console.log(`📸 YouTube track - saving coverUrl: ${track.coverUrl}`);

@@ -560,12 +560,24 @@ const NewDesignApp: React.FC = () => {
 
   const handleCreatePlaylist = () => {
     if (!newPlaylistTitle.trim()) return;
-    createPlaylist(newPlaylistTitle.trim(), newPlaylistCover || undefined);
+
+    // Создаём плейлист и получаем его ID
+    const newPlaylistId = createPlaylist(newPlaylistTitle.trim(), newPlaylistCover || undefined);
+
+    // Если есть трек, ожидающий добавления — добавляем его в новый плейлист
+    if (playlistSelectionTrack) {
+      addToPlaylist(newPlaylistId, playlistSelectionTrack);
+      setPlaylistSelectionTrack(null);
+      setMoveFromPlaylistId(null);
+      showToast('Плейлист создан и трек добавлен');
+    } else {
+      showToast('Плейлист создан');
+    }
+
     setNewPlaylistTitle('');
     setNewPlaylistCover(null);
     setEditPlaylistCover(null);
     setIsCreatingPlaylist(false);
-    showToast('Плейлист создан');
   };
 
 
@@ -1451,8 +1463,17 @@ const NewDesignApp: React.FC = () => {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
+          {/* Кнопка создания нового плейлиста */}
+          <button
+            onClick={() => setIsCreatingPlaylist(true)}
+            className="w-full flex items-center gap-3 px-6 py-4 border-b border-lebedev-white/20 hover:bg-lebedev-white/10 text-lebedev-red"
+          >
+            <PlusIcon className="w-5 h-5" />
+            <span className="font-bold uppercase">Создать новый плейлист</span>
+          </button>
+
           {playlists.length === 0 ? (
-            <div className="p-6 text-lebedev-gray uppercase text-sm">Сначала создайте плейлист</div>
+            <div className="p-6 text-lebedev-gray uppercase text-sm">Пока нет плейлистов</div>
           ) : (
             playlists.map((pl) => (
               <button
