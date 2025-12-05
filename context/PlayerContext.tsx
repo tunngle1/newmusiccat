@@ -74,6 +74,7 @@ interface PlayerContextType {
   downloadToChatQueue: Track[];
   isDownloadingToChat: string | null;
   downloadToChat: (track: Track) => void;
+  downloadPlaylistToChat: (playlistName: string, tracks: Track[]) => void;
   // Premium Pro Access Helpers
   canDownloadToApp: () => boolean;
   canDownloadToChat: () => boolean;
@@ -111,17 +112,26 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const toggleFavorite = async (track: Track) => {
     try {
+      console.log('[Favorites] Toggling favorite for:', track.title, track.id);
       const isFav = favorites.some(f => f.id === track.id);
       if (isFav) {
+        console.log('[Favorites] Removing from favorites...');
         await storage.removeFromFavorites(track.id);
         setFavorites(prev => prev.filter(f => f.id !== track.id));
+        console.log('[Favorites] Removed successfully');
       } else {
+        console.log('[Favorites] Adding to favorites...');
         await storage.addToFavorites(track);
         setFavorites(prev => [...prev, track]);
+        console.log('[Favorites] Added successfully');
       }
       hapticFeedback.medium();
     } catch (error) {
-      console.error('Error toggling favorite:', error);
+      console.error('[Favorites] Error toggling favorite:', error);
+      // Show error to user
+      if (window.Telegram?.WebApp?.showPopup) {
+        window.Telegram.WebApp.showPopup({ message: "Ошибка при сохранении. Попробуйте еще раз." });
+      }
     }
   };
 
@@ -769,6 +779,8 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const createPlaylist = (name: string, coverFile?: File): string => {
     const newPlaylistId = Date.now().toString();
+    console.log('[Playlist] Creating new playlist:', name, 'ID:', newPlaylistId);
+
     const newPlaylist: Playlist = {
       id: newPlaylistId,
       name,
@@ -777,16 +789,24 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         : `https://picsum.photos/400/400?random=${Date.now()}`,
       trackIds: []
     };
+
+    // Update state immediately for responsive UI
     setPlaylists(prev => [...prev, newPlaylist]);
-    storage.savePlaylist(newPlaylist, coverFile).catch(err => {
-      console.error("Failed to save playlist:", err);
-      // Revert state if save fails? Or just notify user
-      if (window.Telegram?.WebApp?.showPopup) {
-        window.Telegram.WebApp.showPopup({ message: "Ошибка при сохранении плейлиста" });
-      } else {
-        console.error("Ошибка при сохранении плейлиста");
-      }
-    });
+    console.log('[Playlist] State updated, saving to storage...');
+
+    // Save to storage (don't await, but log result)
+    storage.savePlaylist(newPlaylist, coverFile)
+      .then(() => {
+        console.log('[Playlist] Saved to storage successfully:', newPlaylistId);
+      })
+      .catch(err => {
+        console.error("[Playlist] Failed to save playlist:", err);
+        // Show error to user
+        if (window.Telegram?.WebApp?.showPopup) {
+          window.Telegram.WebApp.showPopup({ message: "Ошибка при сохранении плейлиста. Попробуйте еще раз." });
+        }
+      });
+
     return newPlaylistId;
   };
 
@@ -1176,6 +1196,38 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setDownloadToChatQueue(prev => [...prev, track]);
   };
 
+  const downloadPlaylistToChat = async (playlistName: string, tracks: Track[]) => {
+    if (!user || tracks.length === 0) return;
+
+    try {
+      // Import sendMessageToChat from api
+      const { sendMessageToChat } = await import('../utils/api');
+
+      // Send playlist header message
+      const headerMessage = `🎵 <b>Плейлист: ${playlistName}</b>\n\n📀 ${tracks.length} треков\n\n⬇️ Загрузка начата...`;
+      await sendMessageToChat(user.id, headerMessage);
+
+      // Add all tracks to download queue
+      for (const track of tracks) {
+        if (!downloadToChatQueue.some(t => t.id === track.id) && isDownloadingToChat !== track.id) {
+          setDownloadToChatQueue(prev => [...prev, track]);
+        }
+      }
+
+      // Show toast
+      if (window.Telegram?.WebApp?.showPopup) {
+        window.Telegram.WebApp.showPopup({
+          message: `Плейлист "${playlistName}" отправляется в чат (${tracks.length} треков)`
+        });
+      }
+    } catch (error) {
+      console.error('Error downloading playlist to chat:', error);
+      if (window.Telegram?.WebApp?.showPopup) {
+        window.Telegram.WebApp.showPopup({ message: "Ошибка при отправке плейлиста" });
+      }
+    }
+  };
+
   const downloadTrack = async (track: Track) => {
     // Check if already downloaded
     if (downloadedTracks.has(track.id)) return;
@@ -1259,6 +1311,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       downloadToChatQueue,
       isDownloadingToChat,
       downloadToChat,
+      downloadPlaylistToChat,
       canDownloadToApp: () => {
         return user?.subscription_status?.has_access || false;
       },

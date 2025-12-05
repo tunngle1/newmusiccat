@@ -131,6 +131,7 @@ const NewDesignApp: React.FC = () => {
     downloadProgress,
     downloadQueue,
     downloadToChat,
+    downloadPlaylistToChat,
     downloadToChatQueue,
     isDownloadingToChat,
     addToPlaylist,
@@ -1154,6 +1155,17 @@ const NewDesignApp: React.FC = () => {
       <div className="flex flex-col h-full">
         {selectedPlaylist && (
           <div className="p-6 border-b-2 border-lebedev-white flex justify-end items-center bg-lebedev-black sticky top-0 z-10 gap-3">
+            {playlistTracks.length > 0 && (
+              <button
+                onClick={() => {
+                  downloadPlaylistToChat(selectedPlaylist.name, playlistTracks);
+                }}
+                className="p-2 rounded-full hover:bg-lebedev-red/20 transition-colors group"
+                title="Скачать плейлист в чат"
+              >
+                <SendIcon className="w-6 h-6 text-lebedev-red group-hover:scale-110 transition-transform" />
+              </button>
+            )}
             <button
               onClick={() => {
                 setEditPlaylistTitle(selectedPlaylist.name);
@@ -1401,15 +1413,17 @@ const NewDesignApp: React.FC = () => {
           <div className="py-2">
             <MenuButton icon={StarIcon} label="Подписка" onClick={() => setMenuView('subscription')} />
             <MenuButton icon={UsersIcon} label="Рефералы" onClick={() => setMenuView('referrals')} />
-            <MenuButton
-              icon={LockIcon}
-              label="Админка"
-              onClick={() => {
-                setIsMenuOpen(false);
-                setMenuView('main');
-                setActiveTab(ViewState.ADMIN);
-              }}
-            />
+            {user?.is_admin && (
+              <MenuButton
+                icon={LockIcon}
+                label="Админка"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  setMenuView('main');
+                  setActiveTab(ViewState.ADMIN);
+                }}
+              />
+            )}
           </div>
         );
     }

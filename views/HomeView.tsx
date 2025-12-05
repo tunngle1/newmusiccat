@@ -49,57 +49,6 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
     }
 
     const handleScroll = () => {
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Play, Pause, SkipForward, SkipBack, Heart, Download, Check, RefreshCw, Loader, Settings, MoreVertical } from 'lucide-react';
-import { usePlayer } from '../context/PlayerContext';
-import { Track, ViewState } from '../types';
-import { searchTracks, getGenreTracks, downloadToChat } from '../utils/api';
-import { hapticFeedback, getTelegramUser } from '../utils/telegram';
-import { deduplicateTracks } from '../utils/deduplication';
-import SubscriptionBadge from '../components/SubscriptionBadge';
-import PaymentView from '../views/PaymentView';
-
-interface HomeViewProps {
-  onNavigate: (view: ViewState) => void;
-}
-
-const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
-  const {
-    playTrack,
-    playRadio,
-    currentTrack,
-    currentRadio,
-    isRadioMode,
-    isPlaying,
-    allTracks,
-    downloadTrack,
-    downloadedTracks,
-    isDownloading,
-    togglePlay,
-    searchState,
-    setSearchState,
-    user,
-    favorites,
-    favoriteRadios,
-    toggleFavoriteRadio
-  } = usePlayer();
-
-  const [showActionModal, setShowActionModal] = useState(false);
-  const [trackToAction, setTrackToAction] = useState<Track | null>(null);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [showAllGenres, setShowAllGenres] = useState(false);
-  const [showPayment, setShowPayment] = useState(false);
-
-  console.log('HomeView Render:', { user, isAdmin: user?.is_admin, subStatus: user?.subscription_status });
-
-  // Scroll restoration
-  useEffect(() => {
-    const savedScroll = sessionStorage.getItem('homeScroll');
-    if (savedScroll) {
-      window.scrollTo(0, parseInt(savedScroll));
-    }
-
-    const handleScroll = () => {
       sessionStorage.setItem('homeScroll', window.scrollY.toString());
     };
 

@@ -45,7 +45,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
     // UI state
     const [isLoading, setIsLoading] = useState(true);
     const [targetId, setTargetId] = useState('');
-    const [grantType, setGrantType] = useState<'admin' | 'premium'>('premium');
+    const [grantType, setGrantType] = useState<'admin' | 'premium' | 'premium_pro'>('premium');
     const [grantValue, setGrantValue] = useState(true);
     const [broadcastMessage, setBroadcastMessage] = useState('');
     const [isBroadcasting, setIsBroadcasting] = useState(false);
@@ -280,6 +280,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
             const body: any = { user_id: parseInt(targetId) };
             if (grantType === 'admin') body.is_admin = grantValue;
             if (grantType === 'premium') body.is_premium = grantValue;
+            if (grantType === 'premium_pro') body.is_premium_pro = grantValue;
 
             const response = await fetch(`${API_BASE_URL}/api/admin/grant?admin_id=${user.id}`, {
                 method: 'POST',
@@ -489,10 +490,11 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
             <div className="flex gap-4">
                 <select
                     value={grantType}
-                    onChange={(e) => setGrantType(e.target.value as 'admin' | 'premium')}
+                    onChange={(e) => setGrantType(e.target.value as 'admin' | 'premium' | 'premium_pro')}
                     className="flex-1 bg-black border-2 border-white p-3 text-sm uppercase focus:border-red-500 outline-none font-bold"
                 >
                     <option value="premium">PREMIUM</option>
+                    <option value="premium_pro">PREMIUM PRO</option>
                     <option value="admin">ADMIN</option>
                 </select>
                 <select

@@ -1615,6 +1615,38 @@ async def stream_audio_proxy(request: Request, url: str = Query(..., description
 
 # --- Download to Chat Endpoints ---
 
+class SendMessageRequest(BaseModel):
+    user_id: int
+    message: str
+
+@app.post("/api/send-message")
+async def send_message_to_chat(request: SendMessageRequest, db: Session = Depends(get_db)):
+    """
+    Send text message to user's Telegram chat via bot
+    Used for playlist headers and other notifications
+    """
+    if not BOT_TOKEN:
+        raise HTTPException(status_code=500, detail="Bot token not configured")
+    
+    try:
+        telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(telegram_url, json={
+                'chat_id': request.user_id,
+                'text': request.message,
+                'parse_mode': 'HTML'
+            })
+            
+            if response.status_code != 200:
+                print(f"[SEND_MESSAGE] Telegram API error: {response.status_code} - {response.text}")
+                raise HTTPException(status_code=500, detail="Failed to send message")
+        
+        return {"status": "ok"}
+    except Exception as e:
+        print(f"[SEND_MESSAGE] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 class DownloadToChatRequest(BaseModel):
     user_id: int
     track: TrackInput

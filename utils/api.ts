@@ -236,6 +236,32 @@ export const formatDuration = (seconds: number): string => {
 };
 
 /**
+ * Send text message to Telegram chat via bot
+ */
+export const sendMessageToChat = async (userId: number, message: string): Promise<void> => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/send-message`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                user_id: userId,
+                message: message
+            })
+        });
+
+        if (!response.ok) {
+            const error: ApiError = await response.json();
+            throw new Error(error.detail || 'Ошибка при отправке сообщения');
+        }
+    } catch (error) {
+        console.error('Send message error:', error);
+        throw error;
+    }
+};
+
+/**
  * Download track to Telegram chat via bot
  */
 export const downloadToChat = async (userId: number, track: Track): Promise<void> => {
@@ -267,6 +293,7 @@ export const downloadToChat = async (userId: number, track: Track): Promise<void
         throw error;
     }
 };
+
 
 /**
  * Get lyrics for a track
