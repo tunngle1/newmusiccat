@@ -7,6 +7,7 @@ pydantic==2.5.0
 selenium
 webdriver-manager
 sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
 lyricsgenius==3.0.1
 
 yt-dlp
