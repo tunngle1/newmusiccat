@@ -149,7 +149,8 @@ const NewDesignApp: React.FC = () => {
     toggleFavoriteRadio,
     canDownloadToApp,
     canDownloadToChat,
-    removeDownloadedTrack
+    removeDownloadedTrack,
+    clearRadioState
   } = usePlayer();
 
   const [activeTab, setActiveTab] = useState<ViewState>(ViewState.HOME);
@@ -2145,6 +2146,9 @@ const NewDesignApp: React.FC = () => {
                           genreId: null
                         });
                         setSelectedGenre(null);
+                        clearRadioState();
+                      } else if (tab.id === ViewState.HOME) {
+                        clearRadioState();
                       } else if (tab.id === ViewState.PLAYLISTS && activeTab === ViewState.PLAYLISTS) {
                         setSelectedPlaylistId(null);
                       }

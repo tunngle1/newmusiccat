@@ -78,6 +78,7 @@ interface PlayerContextType {
   // Premium Pro Access Helpers
   canDownloadToApp: () => boolean;
   canDownloadToChat: () => boolean;
+  clearRadioState: () => void;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
@@ -713,6 +714,17 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  const clearRadioState = () => {
+    setCurrentRadio(null);
+    setIsRadioMode(false);
+    setIsPlaying(false);
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+    }
+  };
+
   const togglePlay = () => setIsPlaying(!isPlaying);
 
 
@@ -1321,7 +1333,8 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       },
       canDownloadToChat: () => {
         return true; // Все могут скачивать в чат
-      }
+      },
+      clearRadioState
     }}>
       {children}
     </PlayerContext.Provider>
