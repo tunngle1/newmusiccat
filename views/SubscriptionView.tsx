@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Check, Crown } from 'lucide-react';
-import { API_BASE_URL, TRIBUTE_LINK_MONTH, TRIBUTE_LINK_YEAR } from '../constants';
+import { API_BASE_URL } from '../constants';
 
 interface SubscriptionViewProps {
     onBack: () => void;
@@ -19,6 +19,7 @@ interface SubscriptionPlan {
     name: string;
     duration: string;
     price: number;
+    priceStars: number;
     originalPrice?: number;
     discount?: string;
     features: string[];
@@ -31,6 +32,7 @@ const PLANS: SubscriptionPlan[] = [
         name: 'Месяц',
         duration: '30 дней',
         price: 139,
+        priceStars: 100,
         features: [
             'Безлимитные скачивания',
             'Без рекламы',
@@ -44,6 +46,7 @@ const PLANS: SubscriptionPlan[] = [
         name: 'Год',
         duration: '365 дней',
         price: 1390,
+        priceStars: 1000,
         originalPrice: 1668,
         discount: '-17%',
         popular: true,
@@ -65,6 +68,7 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({ onBack, userId }) =
     const [promoData, setPromoData] = useState<any>(null);
     const [promoError, setPromoError] = useState('');
     const [checkingPromo, setCheckingPromo] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         if (userId) {
@@ -95,7 +99,7 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({ onBack, userId }) =
         setPromoData(null);
 
         try {
-            const response = await fetch(`${API_BASE_URL}/api/promo/check`, {
+            const response = await fetch(`${API_BASE_URL}/api/payment/check-promo`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code: promoCode.trim() })
@@ -117,27 +121,46 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({ onBack, userId }) =
         }
     };
 
-    const handleSubscribe = () => {
+    const handleSubscribe = async () => {
         if (!userId) return;
 
-        // Если есть промокод с Tribute ссылкой, используем её
-        if (promoData && promoData.valid) {
-            const tributeLink = selectedPlan === 'month'
-                ? promoData.tribute_link_month
-                : promoData.tribute_link_year;
+        const selectedPlanData = PLANS.find(plan => plan.id === selectedPlan);
+        if (!selectedPlanData) return;
 
-            if (tributeLink) {
-                window.open(tributeLink, '_blank');
-                return;
+        setIsSubmitting(true);
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/payment/create-stars-invoice`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userId,
+                    plan_id: selectedPlan,
+                    promo_code: promoData?.valid ? promoCode.trim().toUpperCase() : null,
+                    amount: selectedPlanData.priceStars
+                })
+            });
+
+            const data = await response.json();
+            if (!response.ok || !data.invoice_link) {
+                throw new Error(data.detail || 'Не удалось создать счёт Telegram Stars');
             }
+
+            if (window.Telegram?.WebApp?.openInvoice) {
+                window.Telegram.WebApp.openInvoice(data.invoice_link, async (status) => {
+                    if (status === 'paid') {
+                        await loadSubscriptionStatus();
+                    }
+                });
+            } else {
+                window.open(data.invoice_link, '_blank');
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Ошибка оплаты через Telegram Stars';
+            setPromoError(message);
+        } finally {
+            setIsSubmitting(false);
         }
-
-        // Используем стандартные ссылки из .env
-        const tributeLink = selectedPlan === 'month'
-            ? 'https://t.me/tribute/app?startapp=pnxU'
-            : 'https://t.me/tribute/app?startapp=pnxW';
-
-        window.open(tributeLink, '_blank');
     };
 
     const formatDate = (dateString?: string) => {
@@ -214,6 +237,7 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({ onBack, userId }) =
                                 </div>
                                 <div className="text-right">
                                     <div className="text-2xl font-black">{plan.price} ₽</div>
+                                    <div className="text-sm text-gray-400">{plan.priceStars} Stars</div>
                                     {plan.originalPrice && (
                                         <div className="text-sm text-gray-400 line-through">{plan.originalPrice} ₽</div>
                                     )}
@@ -275,10 +299,15 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({ onBack, userId }) =
                 {/* Subscribe Button */}
                 <button
                     onClick={handleSubscribe}
-                    className="w-full bg-white text-black p-5 font-black text-lg uppercase hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center gap-3"
+                    disabled={isSubmitting}
+                    className="w-full bg-white text-black p-5 font-black text-lg uppercase hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center gap-3 disabled:opacity-50"
                 >
                     <Crown className="w-6 h-6" />
-                    {subscriptionStatus?.has_access ? 'ПРОДЛИТЬ ПОДПИСКУ' : 'ОФОРМИТЬ ПОДПИСКУ'}
+                    {isSubmitting
+                        ? 'СОЗДАЕМ СЧЕТ...'
+                        : subscriptionStatus?.has_access
+                            ? 'ПРОДЛИТЬ ЗА STARS'
+                            : 'ОФОРМИТЬ ЗА STARS'}
                 </button>
             </div>
         </div>

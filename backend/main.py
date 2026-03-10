@@ -19,27 +19,13 @@ try:
     from backend.database import User, DownloadedMessage, Lyrics, Payment, Referral, PromoCode, get_db, init_db, SessionLocal
     from backend.cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from backend.lyrics_service import LyricsService
-    from backend.payments import (
-        grant_premium_after_payment,
-        create_yoomoney_link,
-        verify_yoomoney_notification,
-        RUB_PRICE_MONTH,
-        RUB_PRICE_YEAR
-    )
-    from backend.tribute import verify_tribute_signature
+    from backend.payments import grant_premium_after_payment
 except ImportError:
     from hitmo_parser_light import HitmoParser
     from database import User, DownloadedMessage, Lyrics, Payment, Referral, PromoCode, get_db, init_db, SessionLocal
     from cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from lyrics_service import LyricsService
-    from payments import (
-        grant_premium_after_payment,
-        create_yoomoney_link,
-        verify_yoomoney_notification,
-        RUB_PRICE_MONTH,
-        RUB_PRICE_YEAR
-    )
-    from tribute import verify_tribute_signature
+    from payments import grant_premium_after_payment
 
 import os
 from dotenv import load_dotenv
@@ -117,8 +103,6 @@ class PromoCodeCreate(BaseModel):
     code: str
     discount_type: str # 'percent', 'fixed', 'trial'
     value: int
-    tribute_link_month: Optional[str] = None
-    tribute_link_year: Optional[str] = None
     max_uses: int = 0
     expires_at: Optional[datetime] = None
 
@@ -130,8 +114,6 @@ class PromoCodeResponse(BaseModel):
     used_count: int
     max_uses: int
     expires_at: Optional[datetime]
-    tribute_link_month: Optional[str]
-    tribute_link_year: Optional[str]
 
 class PromoCodeCheck(BaseModel):
     code: str
@@ -141,8 +123,6 @@ class PromoCodeCheckResponse(BaseModel):
     message: str
     discount_type: Optional[str] = None
     value: Optional[int] = None
-    tribute_link_month: Optional[str] = None
-    tribute_link_year: Optional[str] = None
 
 class BroadcastRequest(BaseModel):
     message: str
@@ -330,6 +310,50 @@ def can_forward_from_chat(user: User) -> bool:
     """
     return user.is_admin or user.is_premium_pro
 
+async def notify_referrer_about_signup(referrer: User, referred_user: User):
+    if not BOT_TOKEN:
+        return
+
+    try:
+        telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        username = referred_user.username or referred_user.first_name or "пользователь"
+        message_text = f"👥 Новый реферал!\n\n✅ @{username} присоединился по вашей ссылке\n🎁 Когда он оплатит Premium, вы получите такую же подписку!"
+
+        async with httpx.AsyncClient() as client:
+            await client.post(telegram_url, json={
+                'chat_id': referrer.id,
+                'text': message_text
+            })
+    except Exception as e:
+        print(f"❌ Failed to send referral notification: {e}")
+
+async def register_referral_relationship(db: Session, user: User, referrer: User) -> bool:
+    if referrer.id == user.id:
+        return False
+
+    existing_referral = db.query(Referral).filter(
+        Referral.referred_id == user.id
+    ).first()
+
+    if existing_referral:
+        if not user.referred_by:
+            user.referred_by = referrer.id
+            db.commit()
+        return False
+
+    user.referred_by = referrer.id
+    referral = Referral(
+        referrer_id=referrer.id,
+        referred_id=user.id,
+        status='pending',
+        reward_given=False
+    )
+    db.add(referral)
+    db.commit()
+
+    await notify_referrer_about_signup(referrer, user)
+    return True
+
 # --- User & Admin Endpoints ---
 
 @app.post("/api/user/auth")
@@ -360,43 +384,11 @@ async def auth_user(user_data: UserAuth, db: Session = Depends(get_db)):
         # РЕФЕРАЛЬНАЯ СИСТЕМА: Обработка реферальной ссылки
         if hasattr(user_data, 'referrer_id') and user_data.referrer_id:
             try:
-                # Проверяем, что пригласивший существует
                 referrer = db.query(User).filter(User.id == user_data.referrer_id).first()
-                
-                if referrer and referrer.id != user.id:  # Нельзя пригласить самого себя
-                    # Проверяем, нет ли уже реферальной записи
-                    existing_referral = db.query(Referral).filter(
-                        Referral.referred_id == user.id
-                    ).first()
-                    
-                    if not existing_referral:
-                        # Создаём реферальную запись
-                        referral = Referral(
-                            referrer_id=referrer.id,
-                            referred_id=user.id,
-                            status='pending',
-                            reward_given=False
-                        )
-                        db.add(referral)
-                        db.commit()
-                        
+                if referrer:
+                    created = await register_referral_relationship(db, user, referrer)
+                    if created:
                         print(f"✅ Referral created: {referrer.id} invited {user.id}")
-                        
-                        # Отправляем уведомление пригласившему
-                        try:
-                            if BOT_TOKEN:
-                                telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-                                username = user.username or user.first_name or "пользователь"
-                                message_text = f"👥 Новый реферал!\n\n✅ @{username} присоединился по вашей ссылке\n🎁 Когда он оплатит Premium, вы получите такую же подписку!"
-                                
-                                async with httpx.AsyncClient() as client:
-                                    await client.post(telegram_url, json={
-                                        'chat_id': referrer.id,
-                                        'text': message_text
-                                    })
-                                print(f"📨 Referral notification sent to {referrer.id}")
-                        except Exception as e:
-                            print(f"❌ Failed to send referral notification: {e}")
             except Exception as e:
                 print(f"❌ Error processing referral: {e}")
     
@@ -834,45 +826,6 @@ async def startup_event():
 
 # --- Payment Endpoints ---
 
-@app.get("/api/payment/config")
-async def get_payment_config():
-    """Получение конфигурации платежей (адрес кошелька TON и т.д.)"""
-    from payments import TON_WALLET_ADDRESS, TON_PRICE_MONTH, TON_PRICE_YEAR
-    return {
-        "ton_wallet_address": TON_WALLET_ADDRESS,
-        "ton_price_month": TON_PRICE_MONTH,
-        "ton_price_year": TON_PRICE_YEAR,
-        "tribute_link_month": os.getenv("TRIBUTE_LINK_MONTH"),
-        "tribute_link_year": os.getenv("TRIBUTE_LINK_YEAR")
-    }
-
-@app.post("/api/payment/stars/create")
-async def create_stars_invoice_endpoint(request: CreateInvoiceRequest):
-    """Создание инвойса для Telegram Stars"""
-    try:
-        result = await create_stars_invoice(request.user_id, request.plan)
-        return {"status": "ok", **result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/payment/ton/verify")
-async def verify_ton_payment(request: TonVerificationRequest, db: Session = Depends(get_db)):
-    """Проверка оплаты TON"""
-    try:
-        # Определяем сумму по плану
-        from backend.payments import TON_PRICE_MONTH, TON_PRICE_YEAR
-        amount = TON_PRICE_MONTH if request.plan == 'month' else TON_PRICE_YEAR
-        
-        is_valid = await verify_ton_transaction(request.boc, request.user_id, request.plan)
-        
-        if is_valid:
-            grant_premium_after_payment(db, request.user_id, request.plan, "ton", amount)
-            return {"status": "ok", "message": "Payment verified and premium granted"}
-        else:
-            raise HTTPException(status_code=400, detail="Invalid transaction")
-            
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 class CreateStarsInvoiceRequest(BaseModel):
     user_id: int
     plan_id: str
@@ -927,46 +880,6 @@ async def create_stars_invoice_with_promo(request: CreateStarsInvoiceRequest, db
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/payment/create-yoomoney-link")
-async def create_yoomoney_link_endpoint(request: CreateStarsInvoiceRequest, db: Session = Depends(get_db)):
-    """Создание ссылки для оплаты через ЮMoney (P2P)"""
-    try:
-        # Определяем базовую цену
-        amount = RUB_PRICE_MONTH if request.plan_id == 'month' else RUB_PRICE_YEAR
-        
-        # Применяем промокод если указан
-        if request.promo_code:
-            promo = db.query(PromoCode).filter(
-                PromoCode.code == request.promo_code.upper(),
-                PromoCode.is_active == True
-            ).first()
-            
-            if promo:
-                # Проверяем срок действия
-                if not promo.expires_at or promo.expires_at > datetime.utcnow():
-                    # Проверяем количество использований
-                    if promo.max_uses == 0 or promo.used_count < promo.max_uses:
-                        # Применяем скидку
-                        if promo.discount_type == 'percent':
-                            amount = int(amount * (1 - promo.value / 100))
-                        elif promo.discount_type == 'fixed':
-                            amount = max(0, int(amount - promo.value))
-                        
-                        print(f"Promo code {promo.code} applied: discount={promo.value}{'%' if promo.discount_type == 'percent' else '₽'}, final_amount={amount}")
-        
-        # Генерируем ссылку
-        link = create_yoomoney_link(request.user_id, request.plan_id, amount)
-        
-        print(f"YooMoney link created: user={request.user_id} plan={request.plan_id} amount={amount}")
-        return {
-            "status": "ok",
-            "payment_link": link
-        }
-    except Exception as e:
-        print(f"Error creating YooMoney link: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.post("/api/payment/check-promo")
 async def check_promo_code(request: PromoCodeCheck, db: Session = Depends(get_db)):
     """Проверка промокода"""
@@ -1008,143 +921,6 @@ async def check_promo_code(request: PromoCodeCheck, db: Session = Depends(get_db
             "valid": False,
             "message": "Ошибка проверки промокода"
         }
-
-@app.post("/api/webhook/yoomoney")
-async def yoomoney_webhook(request: Request, db: Session = Depends(get_db)):
-    """
-    Webhook для обработки уведомлений от ЮMoney (HTTP-notification).
-    """
-    try:
-        # Получаем данные формы (application/x-www-form-urlencoded)
-        form_data = await request.form()
-        data = dict(form_data)
-        
-        print(f"📥 YooMoney webhook received: {data}")
-        
-        # Проверяем подпись
-        if not verify_yoomoney_notification(data):
-            print("❌ Invalid YooMoney signature")
-            return Response(status_code=200) # Возвращаем 200, чтобы не слали повторы, но логируем ошибку
-            
-        # Парсим label
-        label = data.get("label", "")
-        parts = label.split(":")
-        
-        if len(parts) >= 2:
-            user_id = int(parts[0])
-            plan = parts[1]
-            amount = float(data.get("amount", 0))
-            
-            print(f"✅ YooMoney payment verified: user={user_id} plan={plan} amount={amount}")
-            
-            # Выдаем премиум
-            result = grant_premium_after_payment(db, user_id, plan, "yoomoney_p2p", amount)
-            
-            if result:
-                # Отправляем уведомление пользователю
-                try:
-                    if BOT_TOKEN:
-                        telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-                        plan_text = "1 месяц" if plan == "month" else "1 год"
-                        message_text = f"🎉 Оплата прошла успешно!\n\n✅ Premium подписка активирована на {plan_text}\n💰 Сумма: {amount}₽\n\nТеперь вам доступны все функции!"
-                        
-                        async with httpx.AsyncClient() as client:
-                            await client.post(telegram_url, json={
-                                'chat_id': user_id,
-                                'text': message_text
-                            })
-                        print(f"📨 Notification sent to user {user_id}")
-                        
-                        # Если есть реферальная награда - отправляем уведомление пригласившему
-                        if isinstance(result, dict) and result.get('success') and result.get('referrer_id'):
-                            referrer_id = result['referrer_id']
-                            referrer_username = result.get('referrer_username', 'пользователь')
-                            plan_text_ref = "1 месяц" if result['plan'] == "month" else "1 год"
-                            
-                            referrer_message = f"🎁 Ваш реферал оплатил Premium!\n\n✅ Вам начислен Premium на {plan_text_ref}\n👤 Реферал: @{referrer_username}\n\nСпасибо за приглашение друзей!"
-                            
-                            await client.post(telegram_url, json={
-                                'chat_id': referrer_id,
-                                'text': referrer_message
-                            })
-                            print(f"📨 Referral reward notification sent to {referrer_id}")
-                except Exception as e:
-                    print(f"❌ Failed to send notification: {e}")
-                    
-                print(f"✅ Premium granted to {user_id}")
-            else:
-                print(f"❌ Failed to grant premium to {user_id}")
-        else:
-            print(f"❌ Invalid label format: {label}")
-            
-        return Response(status_code=200)
-        
-    except Exception as e:
-        print(f"❌ YooMoney webhook error: {e}")
-        import traceback
-        traceback.print_exc()
-        return Response(status_code=200)
-
-@app.post("/api/webhook/tribute")
-async def tribute_webhook(request: Request, db: Session = Depends(get_db)):
-    """Webhook для Tribute (если используется)"""
-    try:
-        # 1. Verify signature
-        api_key = os.getenv("TRIBUTE_API_KEY")
-        signature = request.headers.get("trbt-signature")
-        body = await request.body()
-        
-        if not verify_tribute_signature(api_key, body, signature):
-            print("Invalid Tribute signature")
-            raise HTTPException(status_code=401, detail="Invalid signature")
-            
-        # 2. Parse payload
-        payload = await request.json()
-        event_type = payload.get("name")
-        data = payload.get("payload", {})
-        
-        print(f"Tribute Webhook: {event_type}")
-        
-        # 3. Handle successful payment
-        if event_type in ["order_paid", "subscription_active", "payment_succeeded"]:
-            # Extract user ID
-            telegram_id = None
-            if "customer" in data:
-                telegram_id = data["customer"].get("telegram_id")
-            
-            if telegram_id:
-                # Determine plan based on amount or product
-                # 1 TON ~ 1 Month, 10 TON ~ 1 Year
-                # Or check product IDs if we configured them
-                amount = data.get("amount", {}).get("value", 0)
-                currency = data.get("amount", {}).get("currency", "TON")
-                
-                plan = "month"
-                # Simple logic: if amount > 5 TON, it's a year
-                if float(amount) > 5:
-                    plan = "year"
-                
-                print(f"Processing payment for user {telegram_id}, amount {amount} {currency}, plan {plan}")
-                
-                # Grant premium
-                # Note: telegram_id in Tribute is the user's Telegram ID
-                # We need to ensure we have this user in our DB
-                # Our User.id IS the telegram_id
-                
-                success = grant_premium_after_payment(db, int(telegram_id), plan, "tribute", float(amount))
-                if success:
-                    print(f"Successfully granted premium to {telegram_id}")
-                else:
-                    print(f"Failed to grant premium to {telegram_id}")
-            else:
-                print("Could not find telegram_id in webhook payload")
-                    
-        return {"status": "ok"}
-        
-    except Exception as e:
-        print(f"Tribute webhook error: {e}")
-        # Return 200 to acknowledge receipt even if processing failed, to stop retries
-        return {"status": "ok"}
 
 # --- Debug Endpoints (для тестирования) ---
 
@@ -1220,12 +996,10 @@ async def debug_grant_premium(
     if not admin or not admin.is_admin:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Определяем сумму
-    from backend.payments import TON_PRICE_MONTH, TON_PRICE_YEAR
-    amount = TON_PRICE_MONTH if plan == 'month' else TON_PRICE_YEAR
+    amount = 100 if plan == 'month' else 1000
     
     # Выдаем премиум
-    success = grant_premium_after_payment(db, user_id, plan, "ton_manual", amount)
+    success = grant_premium_after_payment(db, user_id, plan, "telegram_stars", amount)
     
     if success:
         return {
@@ -1573,6 +1347,8 @@ async def stream_audio_proxy(request: Request, url: str = Query(..., description
         if r.status_code >= 400:
             print(f"Stream error status: {r.status_code} for {url}")
             await client.aclose()
+            if r.status_code == 404 and "hitmotop.com" in url:
+                raise HTTPException(status_code=404, detail="Hitmo source URL expired")
             # If 403/429, it might be blocking.
             if r.status_code in [403, 429]:
                  raise HTTPException(status_code=503, detail="Source blocked request")
@@ -1943,7 +1719,7 @@ async def get_youtube_info(request: YouTubeRequest):
         # Путь к файлу куки (если есть)
         cookies_file = os.path.join(os.path.dirname(__file__), 'cookies.txt')
         
-        ydl_opts = {
+        base_ydl_opts = {
             'format': 'bestaudio/best',
             'quiet': True,
             'no_warnings': True,
@@ -1966,50 +1742,67 @@ async def get_youtube_info(request: YouTubeRequest):
         
         # Добавляем куки если файл существует
         if os.path.exists(cookies_file):
-            ydl_opts['cookiefile'] = cookies_file
+            base_ydl_opts['cookiefile'] = cookies_file
             print(f"Using cookies from: {cookies_file}")
-        
-        # Добавляем прокси если есть
+
+        extraction_errors = []
+        proxy_candidates = []
         if youtube_proxies:
-            proxy = random.choice(youtube_proxies)
-            ydl_opts['proxy'] = proxy
-            print(f"Using YouTube proxy: {proxy}")
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(request.url, download=False)
-            
-            # Extract relevant info
-            video_id = info.get('id')
-            title = info.get('title', 'Unknown Title')
-            uploader = info.get('uploader', 'Unknown Artist')
-            duration = info.get('duration', 0)
-            thumbnail = info.get('thumbnail', '')
-            # Для YouTube НЕ используем прямую ссылку (она истекает)
-            # Вместо этого сохраняем оригинальную YouTube ссылку
-            original_url = request.url
-            
-            # Clean up title
-            clean_title = title.replace('(Official Video)', '').replace('[Official Video]', '').strip()
-            
-            # Try to parse Artist - Title
-            if '-' in clean_title:
-                parts = clean_title.split('-', 1)
-                artist = parts[0].strip()
-                track_title = parts[1].strip()
+            proxy_candidates.append(random.choice(youtube_proxies))
+        proxy_candidates.append(None)
+
+        info = None
+        for proxy in proxy_candidates:
+            ydl_opts = dict(base_ydl_opts)
+            if proxy:
+                ydl_opts['proxy'] = proxy
+                print(f"Using YouTube proxy: {proxy}")
             else:
-                artist = uploader
-                track_title = clean_title
-                
-            print(f"YouTube track created: id={video_id}, url={original_url}")
-                
-            return Track(
-                id=f"yt_{video_id}",
-                title=track_title,
-                artist=artist,
-                duration=duration,
-                url=original_url,  # Оригинальная YouTube ссылка
-                image=thumbnail
-            )
+                print("Using YouTube direct connection without proxy")
+
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(request.url, download=False)
+                break
+            except Exception as extraction_error:
+                extraction_errors.append(str(extraction_error))
+                print(f"YouTube extraction failed with {'proxy' if proxy else 'direct connection'}: {extraction_error}")
+
+        if not info:
+            raise Exception(" | ".join(extraction_errors) if extraction_errors else "Failed to extract YouTube info")
+
+        # Extract relevant info
+        video_id = info.get('id')
+        title = info.get('title', 'Unknown Title')
+        uploader = info.get('uploader', 'Unknown Artist')
+        duration = info.get('duration', 0)
+        thumbnail = info.get('thumbnail', '')
+        # Для YouTube НЕ используем прямую ссылку (она истекает)
+        # Вместо этого сохраняем оригинальную YouTube ссылку
+        original_url = request.url
+
+        # Clean up title
+        clean_title = title.replace('(Official Video)', '').replace('[Official Video]', '').strip()
+
+        # Try to parse Artist - Title
+        if '-' in clean_title:
+            parts = clean_title.split('-', 1)
+            artist = parts[0].strip()
+            track_title = parts[1].strip()
+        else:
+            artist = uploader
+            track_title = clean_title
+
+        print(f"YouTube track created: id={video_id}, url={original_url}")
+
+        return Track(
+            id=f"yt_{video_id}",
+            title=track_title,
+            artist=artist,
+            duration=duration,
+            url=original_url,
+            image=thumbnail
+        )
             
     except Exception as e:
         print(f"Error extracting YouTube info: {e}")
@@ -2460,8 +2253,7 @@ async def get_referral_code(user_id: int = Query(...), db: Session = Depends(get
         user.referral_code = f"REF{user_id}"
         db.commit()
     
-    # Use muzikavtgbot as bot username
-    bot_username = "muzikavtgbot"
+    bot_username = os.getenv("BOT_USERNAME", "muzikavtgbot")
     
     return {
         "code": user.referral_code,
@@ -2481,8 +2273,24 @@ async def register_referral(
     db: Session = Depends(get_db)
 ):
     """Register a new user as referred by someone"""
-    # Find referrer by code
-    referrer = db.query(User).filter(User.referral_code == referral_code).first()
+    normalized_referral_code = referral_code.strip()
+    referrer = None
+
+    if normalized_referral_code.startswith('ref_'):
+        try:
+            referrer_id = int(normalized_referral_code.replace('ref_', ''))
+            referrer = db.query(User).filter(User.id == referrer_id).first()
+        except ValueError:
+            referrer = None
+    elif normalized_referral_code.startswith('REF'):
+        try:
+            referrer_id = int(normalized_referral_code.replace('REF', ''))
+            referrer = db.query(User).filter(User.id == referrer_id).first()
+        except ValueError:
+            referrer = None
+
+    if not referrer:
+        referrer = db.query(User).filter(User.referral_code == normalized_referral_code).first()
     
     if not referrer:
         raise HTTPException(status_code=400, detail="Invalid referral code")
@@ -2495,49 +2303,9 @@ async def register_referral(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Check if already referred
-    if user.referred_by:
-        raise HTTPException(status_code=400, detail="User already has a referrer")
-    
-    # Check if referral already exists
-    existing = db.query(Referral).filter(
-        Referral.referred_id == user_id
-    ).first()
-    
-    if existing:
+    created = await register_referral_relationship(db, user, referrer)
+    if not created:
         raise HTTPException(status_code=400, detail="Referral already registered")
-    
-    # Create referral record
-    user.referred_by = referrer.id
-    
-    referral = Referral(
-        referrer_id=referrer.id,
-        referred_id=user_id,
-        status='pending',
-        reward_given=False
-    )
-    db.add(referral)
-    db.commit()
-    
-    # Send notification to referrer via Telegram
-    if BOT_TOKEN:
-        try:
-            import httpx
-            telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-            
-            # Get new user name
-            new_user_name = user.first_name or user.username or f"Пользователь {user.id}"
-            
-            async with httpx.AsyncClient() as client:
-                await client.post(telegram_url, json={
-                    'chat_id': referrer.id,
-                    'text': f"🎉 <b>Новый реферал!</b>\n\n"
-                            f"{new_user_name} зарегистрировался по вашей ссылке.\n"
-                            f"Когда он оформит подписку, вы получите +30 дней Premium!",
-                    'parse_mode': 'HTML'
-                })
-        except Exception as e:
-            print(f"Failed to send referral joined notification: {e}")
     
     return {
         "status": "ok",
@@ -2704,8 +2472,6 @@ async def create_promo_code(request: PromoCodeCreate, user_id: int = Query(...),
         discount_type=request.discount_type,
         value=request.value,
         max_uses=request.max_uses if request.max_uses else 0,
-        tribute_link_month=request.tribute_link_month if hasattr(request, 'tribute_link_month') else None,
-        tribute_link_year=request.tribute_link_year if hasattr(request, 'tribute_link_year') else None,
         is_active=True
     )
     
@@ -2744,58 +2510,6 @@ async def delete_promo_code(promo_id: int, user_id: int = Query(...), db: Sessio
     db.commit()
     
     return {"status": "ok"}
-
-
-@app.get("/api/referral/code")
-async def get_referral_code(user_id: int = Query(...), db: Session = Depends(get_db)):
-    """Получение реферального кода и ссылки пользователя"""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Генерируем реферальную ссылку
-    # Формат: https://t.me/ВАШ_БОТ?start=ref_USER_ID
-    bot_username = os.getenv("BOT_USERNAME", "your_bot")
-    referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
-    
-    return {
-        "code": f"REF{user_id}",
-        "link": referral_link
-    }
-
-
-@app.get("/api/referral/stats")
-async def get_referral_stats(user_id: int = Query(...), db: Session = Depends(get_db)):
-    """Получение статистики по рефералам"""
-    # Получаем всех рефералов пользователя
-    referrals = db.query(Referral).filter(Referral.referrer_id == user_id).all()
-    
-    total_referrals = len(referrals)
-    completed_referrals = sum(1 for ref in referrals if ref.status == 'completed')
-    pending_referrals = sum(1 for ref in referrals if ref.status == 'pending')
-    
-    # Получаем детальную информацию о рефералах
-    referral_list = []
-    for ref in referrals:
-        referred_user = db.query(User).filter(User.id == ref.referred_id).first()
-        if referred_user:
-            referral_list.append({
-                "id": ref.id,
-                "user_id": referred_user.id,
-                "username": referred_user.username,
-                "first_name": referred_user.first_name,
-                "status": ref.status,
-                "reward_given": ref.reward_given,
-                "created_at": ref.created_at.isoformat() if ref.created_at else None,
-                "completed_at": ref.completed_at.isoformat() if ref.completed_at else None
-            })
-    
-    return {
-        "total_referrals": total_referrals,
-        "completed_referrals": completed_referrals,
-        "pending_referrals": pending_referrals,
-        "referrals": referral_list
-    }
 
 
 @app.delete("/api/admin/user/{user_id}")

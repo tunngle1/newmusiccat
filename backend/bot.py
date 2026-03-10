@@ -19,47 +19,18 @@ WEBAPP_URL = os.getenv("WEBAPP_URL", "https://your-webapp-url.com")
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка команды /start с реферальным кодом"""
     user = update.effective_user
-    user_id = user.id
     
     # Проверяем, есть ли start параметр (реферальный код)
     referral_code = None
     if context.args and len(context.args) > 0:
         referral_code = context.args[0]
         
-        # Регистрируем реферала через API
-        if referral_code.startswith('REF'):
-            try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"{API_BASE_URL}/api/referral/register",
-                        params={
-                            "user_id": user_id,
-                            "referral_code": referral_code
-                        }
-                    )
-                    
-                    if response.status_code == 200:
-                        # Уведомляем реферера
-                        referrer_id = response.json().get('referrer_id')
-                        if referrer_id:
-                            await context.bot.send_message(
-                                chat_id=referrer_id,
-                                text=f"🎉 <b>Новый реферал!</b>\n\n"
-                                     f"{user.first_name} зарегистрировался по вашей ссылке.\n"
-                                     f"Когда он оформит подписку, вы получите +30 дней Premium!",
-                                parse_mode='HTML'
-                            )
-                        
-                        welcome_text = (
-                            f"🎉 Добро пожаловать, {user.first_name}!\n\n"
-                            f"Вы зарегистрированы по реферальной ссылке.\n"
-                            f"Оформите подписку, и ваш друг получит бонус!"
-                        )
-                    else:
-                        welcome_text = f"👋 Добро пожаловать, {user.first_name}!"
-            except Exception as e:
-                print(f"Error registering referral: {e}")
-                welcome_text = f"👋 Добро пожаловать, {user.first_name}!"
+        if referral_code.startswith('REF') or referral_code.startswith('ref_'):
+            welcome_text = (
+                f"🎉 Добро пожаловать, {user.first_name}!\n\n"
+                f"Вы перешли по реферальной ссылке.\n"
+                f"Откройте приложение, чтобы завершить регистрацию и активировать бонусы."
+            )
         else:
             welcome_text = f"👋 Добро пожаловать, {user.first_name}!"
     else:
@@ -88,11 +59,12 @@ async def premium_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{API_BASE_URL}/api/subscription/status?user_id={user_id}"
+                f"{API_BASE_URL}/api/user/subscription-status?user_id={user_id}"
             )
             
             if response.status_code == 200:
-                data = response.json()
+                payload = response.json()
+                data = payload.get('subscription_status', {})
                 
                 if data.get('has_access'):
                     reason = data.get('reason')

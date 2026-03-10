@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, SubscriptionPlan } from '../types';
-import { Loader, Check, Star, Zap, CreditCard } from 'lucide-react';
+import { Loader, Check, Star } from 'lucide-react';
 import { API_BASE_URL } from '../constants';
 
 // Планы подписки
@@ -9,7 +9,6 @@ const PLANS: SubscriptionPlan[] = [
         id: 'month',
         name: '1 Месяц',
         priceStars: 100,
-        priceTon: 1.0,
         priceRub: 139,
         duration: '30 дней',
         features: ['Безлимитное скачивание', 'Доступ к эксклюзивам', 'Поддержка авторов']
@@ -18,7 +17,6 @@ const PLANS: SubscriptionPlan[] = [
         id: 'year',
         name: '1 Год',
         priceStars: 1000,
-        priceTon: 10.0,
         priceRub: 1390,
         duration: '365 дней',
         features: ['Все преимущества', 'Выгоднее на 20%', 'Золотой бейдж']
@@ -80,43 +78,33 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
     };
 
 
-    const handleYooMoneyPayment = async () => {
+    const handleStarsPayment = async () => {
         if (!user) return;
         setIsLoading(true);
         try {
-            // Создаем ссылку на оплату
-            const response = await fetch(`${API_BASE_URL}/api/payment/create-yoomoney-link`, {
+            const response = await fetch(`${API_BASE_URL}/api/payment/create-stars-invoice`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     user_id: user.id,
                     plan_id: selectedPlan.id,
                     promo_code: appliedPromo?.code || null,
-                    amount: 0 // Цена определяется на сервере
+                    amount: selectedPlan.priceStars
                 })
             });
 
-            if (!response.ok) throw new Error('Failed to create payment link');
+            const data = await response.json();
+            if (!response.ok || !data.invoice_link) throw new Error(data.detail || 'Failed to create Stars invoice');
 
-            const { payment_link } = await response.json();
-
-            // Открываем ссылку
-            if ((window.Telegram?.WebApp as any)?.openLink) {
-                (window.Telegram.WebApp as any).openLink(payment_link);
+            if (window.Telegram?.WebApp?.openInvoice) {
+                window.Telegram.WebApp.openInvoice(data.invoice_link, () => {});
             } else {
-                window.open(payment_link, '_blank');
+                window.open(data.invoice_link, '_blank');
             }
 
-            // Показываем инструкцию
-            window.Telegram?.WebApp?.showPopup({
-                title: 'Оплата через ЮMoney',
-                message: 'После успешной оплаты вернитесь в бота. Премиум активируется автоматически в течение минуты.',
-                buttons: [{ type: 'ok' }]
-            });
-
         } catch (error) {
-            console.error('YooMoney Payment error:', error);
-            window.Telegram?.WebApp?.showAlert('Ошибка при создании ссылки на оплату.');
+            console.error('Stars Payment error:', error);
+            window.Telegram?.WebApp?.showAlert('Ошибка при создании счета Telegram Stars.');
         } finally {
             setIsLoading(false);
         }
@@ -156,7 +144,7 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
                             <div className="text-sm text-gray-400">{plan.duration}</div>
                             <div className="text-xl font-bold text-white mt-1">{plan.name}</div>
                             <div className="text-blue-400 font-medium mt-2">
-                                {plan.priceStars} ⭐ / {plan.priceTon} TON
+                                {plan.priceStars} ⭐
                             </div>
                         </button>
                     ))}
@@ -200,19 +188,19 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
                 {/* Кнопки оплаты */}
                 <div className="space-y-3 pt-2">
                     <button
-                        onClick={handleYooMoneyPayment}
+                        onClick={handleStarsPayment}
                         disabled={isLoading}
-                        className="w-full py-4 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                        className="w-full py-4 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
                     >
                         {isLoading ? (
                             <Loader size={20} className="animate-spin" />
                         ) : (
                             <>
-                                <CreditCard size={20} />
-                                Оплатить {getDiscountedPrice(selectedPlan.priceRub)} ₽
+                                <Star size={20} />
+                                Оплатить {getDiscountedPrice(selectedPlan.priceStars)} Stars
                                 {appliedPromo && (
                                     <span className="ml-2 text-sm line-through opacity-70">
-                                        {selectedPlan.priceRub}₽
+                                        {selectedPlan.priceStars} Stars
                                     </span>
                                 )}
                             </>
@@ -220,7 +208,7 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
                     </button>
 
                     <p className="text-center text-xs text-gray-500 mt-2">
-                        Безопасная оплата картой РФ или кошельком ЮMoney
+                        Оплата производится через Telegram Stars внутри Mini App
                     </p>
                 </div>
 

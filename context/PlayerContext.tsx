@@ -310,6 +310,12 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       // 1. Auth User
       if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
         const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
+        const startParam = window.Telegram.WebApp.initDataUnsafe.start_param;
+        const referrerId = startParam?.startsWith('ref_')
+          ? parseInt(startParam.replace('ref_', ''))
+          : startParam?.startsWith('REF')
+            ? parseInt(startParam.replace('REF', ''))
+            : undefined;
         try {
           const response = await fetch(`${API_BASE_URL}/api/user/auth`, {
             method: 'POST',
@@ -321,9 +327,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               last_name: tgUser.last_name,
               auth_date: window.Telegram.WebApp.initDataUnsafe.auth_date || 0,
               hash: window.Telegram.WebApp.initDataUnsafe.hash || "",
-              referrer_id: window.Telegram.WebApp.initDataUnsafe.start_param?.startsWith('ref_')
-                ? parseInt(window.Telegram.WebApp.initDataUnsafe.start_param.replace('ref_', ''))
-                : undefined
+              referrer_id: Number.isFinite(referrerId) ? referrerId : undefined
             })
           });
           if (response.ok) {

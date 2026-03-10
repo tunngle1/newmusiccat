@@ -54,9 +54,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
         code: '',
         discount_type: 'percent',
         value: 0,
-        max_uses: 0,
-        tribute_link_month: '',
-        tribute_link_year: ''
+        max_uses: 0
     });
 
     useEffect(() => {
@@ -228,9 +226,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                     code: '',
                     discount_type: 'percent',
                     value: 0,
-                    max_uses: 0,
-                    tribute_link_month: '',
-                    tribute_link_year: ''
+                    max_uses: 0
                 });
                 loadPromoCodes();
             } else {

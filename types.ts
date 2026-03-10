@@ -27,7 +27,6 @@ export interface SubscriptionPlan {
   id: 'month' | 'year';
   name: string;
   priceStars: number;
-  priceTon: number;
   priceRub: number;
   duration: string;
   features: string[];

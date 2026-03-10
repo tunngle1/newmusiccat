@@ -439,25 +439,7 @@ const NewDesignApp: React.FC = () => {
 
   useEffect(() => {
     initTelegramWebApp();
-
-    const handleReferral = async () => {
-      if (!user) return;
-      const initData = window.Telegram?.WebApp?.initDataUnsafe;
-      const startParam = (initData as any)?.start_param;
-      if (startParam && startParam.startsWith('REF')) {
-        try {
-          await fetch(`${API_BASE_URL} /api/referral / register ? user_id = ${user.id}& referral_code=${startParam} `, {
-            method: 'POST'
-          });
-          showToast('Реферальная ссылка зарегистрирована');
-        } catch (error) {
-          console.error('Failed to register referral:', error);
-        }
-      }
-    };
-
-    handleReferral();
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     if (isPlayerOpen) {
