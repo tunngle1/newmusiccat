@@ -272,6 +272,7 @@ const NewDesignApp: React.FC = () => {
   const allTracksSafe = allTracks;
   const safeTrack: Track | null = currentTrack || searchState.results[0] || null;
   const miniTrack = currentTrack;
+  const shouldShowMiniPlayer = Boolean(miniTrack) && !isPlayerOpen && !(activeTab === ViewState.HOME && isRadioMode);
   const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
   const hasAccess = user?.subscription_status?.has_access ?? true;
 
@@ -2046,10 +2047,10 @@ const NewDesignApp: React.FC = () => {
           </header>
         )}
 
-        <main className="flex-1 overflow-y-auto pb-48 overscroll-none scroll-smooth custom-scrollbar scrollbar-hidden">{renderContent()}</main>
+        <main className={`flex-1 overflow-y-auto overscroll-none scroll-smooth custom-scrollbar scrollbar-hidden ${shouldShowMiniPlayer ? 'pb-48' : 'pb-24'}`}>{renderContent()}</main>
 
         <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-30 flex flex-col">
-          {miniTrack && !isPlayerOpen && (
+          {shouldShowMiniPlayer && (
             <div
               onClick={() => setIsPlayerOpen(prev => !prev)}
               className="border-t-2 border-lebedev-white cursor-pointer transition-colors text-white shadow-[0_-12px_32px_rgba(0,0,0,0.65)]"
@@ -2117,7 +2118,7 @@ const NewDesignApp: React.FC = () => {
             <nav
               className="h-16 border-t-2 border-lebedev-white grid grid-cols-5 pb-safe shadow-[0_-12px_32px_rgba(0,0,0,0.65)] transition-colors duration-700"
               style={{
-                backgroundColor: isCoverColor && miniTrack ? playerBgColor : '#000000'
+                backgroundColor: isCoverColor && shouldShowMiniPlayer ? playerBgColor : '#000000'
               }}
             >
               {[
