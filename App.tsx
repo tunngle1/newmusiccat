@@ -43,6 +43,7 @@ import AdminView from './views/AdminView';
 
 import SubscriptionView from './views/SubscriptionView';
 import { fetchLyrics } from './utils/lyricsClient';
+import { deduplicateTracks } from './utils/deduplication';
 
 const PRESET_GENRES = [
   { name: 'HIP-HOP', genreId: 3, seed: 'hiphop' },
@@ -402,9 +403,7 @@ const NewDesignApp: React.FC = () => {
         }
 
         const combined = [...prev.results, ...newResults];
-        const unique = combined.filter(
-          (track, idx, arr) => arr.findIndex((t) => t.title === track.title && t.artist === track.artist) === idx
-        );
+        const unique = deduplicateTracks(combined, 3);
         return {
           ...prev,
           results: unique,
@@ -476,9 +475,7 @@ const NewDesignApp: React.FC = () => {
         setSearchState((prev) => ({ ...prev, isSearching: true, error: null, page: 1, results: [] }));
         try {
           const results = await searchTracks(query, 20, 1, mode, controller.signal);
-          const unique = results.filter(
-            (track, idx, arr) => arr.findIndex((t) => t.title === track.title && t.artist === track.artist) === idx
-          );
+          const unique = deduplicateTracks(results, 3);
           if (cancelled) return;
           setSearchState((prev) => ({
             ...prev,

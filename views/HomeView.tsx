@@ -62,7 +62,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
 
   // Отображаемые треки: результаты поиска или все треки (с дедупликацией)
   const rawDisplayTracks = searchState.results.length > 0 ? searchState.results : (searchState.query.trim() ? [] : allTracks);
-  const displayTracks = deduplicateTracks(rawDisplayTracks);
+  const displayTracks = deduplicateTracks(rawDisplayTracks, 3);
 
   // Search with debounce
   useEffect(() => {
@@ -128,9 +128,10 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
       if (newResults.length === 0) {
         setSearchState(prev => ({ ...prev, hasMore: false }));
       } else {
+        const mergedResults = deduplicateTracks([...searchState.results, ...newResults], 3);
         setSearchState(prev => ({
           ...prev,
-          results: [...prev.results, ...newResults],
+          results: mergedResults,
           page: nextPage,
           hasMore: newResults.length >= 20
         }));
