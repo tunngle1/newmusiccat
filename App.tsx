@@ -982,8 +982,8 @@ const NewDesignApp: React.FC = () => {
     }
 
     return (
-      <div className="flex flex-col gap-8 pb-8">
-        <div className="p-4 border-b border-lebedev-white bg-lebedev-black">
+      <div className="flex flex-col h-full">
+        <div className="p-4 border-b border-lebedev-white bg-lebedev-black sticky top-0 z-20">
           <div className="relative group flex items-center bg-lebedev-white/10 p-2 border border-transparent hover:border-lebedev-white/30 transition-colors">
             <SearchIcon className="w-5 h-5 text-lebedev-gray ml-2" />
             <input
