@@ -149,8 +149,7 @@ const NewDesignApp: React.FC = () => {
     toggleFavoriteRadio,
     canDownloadToApp,
     canDownloadToChat,
-    removeDownloadedTrack,
-    clearRadioState
+    removeDownloadedTrack
   } = usePlayer();
 
   const [activeTab, setActiveTab] = useState<ViewState>(ViewState.HOME);
@@ -272,7 +271,7 @@ const NewDesignApp: React.FC = () => {
   const allTracksSafe = allTracks;
   const safeTrack: Track | null = currentTrack || searchState.results[0] || null;
   const miniTrack = currentTrack;
-  const shouldShowMiniPlayer = Boolean(miniTrack) && !isPlayerOpen && !(activeTab === ViewState.HOME && isRadioMode);
+  const shouldShowMiniPlayer = Boolean(miniTrack) && !isPlayerOpen;
   const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
   const hasAccess = user?.subscription_status?.has_access ?? true;
 
@@ -983,7 +982,7 @@ const NewDesignApp: React.FC = () => {
 
     return (
       <div className="flex flex-col h-full">
-        <div className="p-4 border-b border-lebedev-white bg-lebedev-black sticky top-0 z-20">
+        <div className="p-4 border-b border-lebedev-white bg-lebedev-black">
           <div className="relative group flex items-center bg-lebedev-white/10 p-2 border border-transparent hover:border-lebedev-white/30 transition-colors">
             <SearchIcon className="w-5 h-5 text-lebedev-gray ml-2" />
             <input
@@ -1292,23 +1291,23 @@ const NewDesignApp: React.FC = () => {
   const renderContent = () => {
     switch (activeTab) {
       case ViewState.HOME:
-        return renderHome();
+        return <div key="view-home">{renderHome()}</div>;
       case ViewState.PLAYLISTS:
-        return renderPlaylists();
+        return <div key="view-playlists">{renderPlaylists()}</div>;
       case ViewState.FAVORITES:
-        return favorites.length > 0
+        return <div key="view-favorites">{favorites.length > 0
           ? favorites.map((t, idx) => renderTrackItem(t, idx, favorites))
-          : renderPlaceholder('Избранное', 'Добавьте треки.');
+          : renderPlaceholder('Избранное', 'Добавьте треки.')}</div>;
       case ViewState.RADIO:
-        return renderRadio();
+        return <div key="view-radio">{renderRadio()}</div>;
       case ViewState.LIBRARY:
-        return renderLibrary();
+        return <div key="view-library">{renderLibrary()}</div>;
       case ViewState.ADMIN:
-        return <AdminView onBack={() => setActiveTab(ViewState.HOME)} />;
+        return <AdminView key="view-admin" onBack={() => setActiveTab(ViewState.HOME)} />;
       case ViewState.SUBSCRIPTION:
-        return <SubscriptionView onBack={() => setActiveTab(ViewState.HOME)} userId={user?.id} />;
+        return <SubscriptionView key="view-subscription" onBack={() => setActiveTab(ViewState.HOME)} userId={user?.id} />;
       default:
-        return renderHome();
+        return <div key="view-home-default">{renderHome()}</div>;
     }
   };
 
@@ -2147,9 +2146,6 @@ const NewDesignApp: React.FC = () => {
                           genreId: null
                         });
                         setSelectedGenre(null);
-                        clearRadioState();
-                      } else if (tab.id === ViewState.HOME) {
-                        clearRadioState();
                       } else if (tab.id === ViewState.PLAYLISTS && activeTab === ViewState.PLAYLISTS) {
                         setSelectedPlaylistId(null);
                       }
