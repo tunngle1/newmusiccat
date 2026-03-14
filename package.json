@@ -4,7 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "npm run dev:fullstack",
+    "dev:frontend": "vite",
+    "dev:backend": "python -m backend.main",
+    "dev:fullstack": "start \"tg-backend\" cmd /k \"npm run dev:backend\" && npm run dev:frontend",
     "build": "vite build",
     "preview": "vite preview"
   },

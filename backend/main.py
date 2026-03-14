@@ -14,25 +14,30 @@ import uvicorn
 import random
 from sqlalchemy.orm import Session
 from datetime import datetime
+from contextlib import asynccontextmanager
+
 try:
     from backend.hitmo_parser_light import HitmoParser
     from backend.database import User, DownloadedMessage, Lyrics, Payment, Referral, PromoCode, get_db, init_db, SessionLocal
     from backend.cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from backend.lyrics_service import LyricsService
     from backend.payments import grant_premium_after_payment
+    from backend.recommendations.models import UserTrackEvent
+    from backend.recommendations.routes import router as recommendations_router, set_parser as set_rec_parser
 except ImportError:
     from hitmo_parser_light import HitmoParser
     from database import User, DownloadedMessage, Lyrics, Payment, Referral, PromoCode, get_db, init_db, SessionLocal
     from cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from lyrics_service import LyricsService
     from payments import grant_premium_after_payment
+    from recommendations.models import UserTrackEvent
+    from recommendations.routes import router as recommendations_router, set_parser as set_rec_parser
 
 import os
 from dotenv import load_dotenv
 import httpx
 
 load_dotenv()
-
 
 # Pydantic модели
 class Track(BaseModel):
@@ -92,8 +97,6 @@ class TrackInput(BaseModel):
 class DownloadToChatRequest(BaseModel):
     user_id: int
     track: TrackInput
-
-
 
 class TransactionListResponse(BaseModel):
     transactions: List[Transaction]
@@ -177,16 +180,28 @@ class UserListItem(BaseModel):
 class UserListResponse(BaseModel):
     users: List[UserListItem]
 
-
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+
+# Глобальный экземпляр парсера
+parser = HitmoParser()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    set_rec_parser(parser)
+    yield
+    parser.close()
 
 # Инициализация FastAPI
 app = FastAPI(
     title="Telegram Music API",
     description="API для поиска и получения музыки через Hitmo парсер",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
+
+app.include_router(recommendations_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
@@ -201,17 +216,33 @@ async def validation_exception_handler(request, exc):
         content={"detail": exc.errors()},
     )
 
+allowed_origins = {
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "https://localhost:5173",
+    "https://127.0.0.1:5173",
+    "https://localhost:5174",
+    "https://127.0.0.1:5174"
+}
+webapp_url = os.getenv("WEBAPP_URL", "").strip()
+if webapp_url:
+    allowed_origins.add(webapp_url.rstrip("/"))
+extra_cors_origins = os.getenv("CORS_ORIGINS", "").strip()
+if extra_cors_origins:
+    allowed_origins.update(origin.strip().rstrip("/") for origin in extra_cors_origins.split(",") if origin.strip())
+
 # CORS настройки для Telegram WebApp
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # В production указать конкретные домены
+    allow_origins=sorted(allowed_origins),
+    allow_origin_regex=r"https://.*\.(vercel\.app|trycloudflare\.com|ngrok-free\.app|ngrok-free\.dev|ngrok\.io)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Глобальный экземпляр парсера
-parser = HitmoParser()
 
 # Telegram Bot Token
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -226,8 +257,6 @@ try:
 except Exception as e:
     print(f"❌ Failed to initialize lyrics service: {e}")
 
-
-
 @app.get("/")
 async def root():
     """Корневой endpoint"""
@@ -236,7 +265,6 @@ async def root():
         "version": "1.0.0",
         "docs": "/docs"
     }
-
 
 @app.get("/health")
 async def health_check():
@@ -623,6 +651,7 @@ async def get_activity_stats(
     ).group_by('date').order_by('date').limit(days).all()
     
     return [ActivityStat(date=s.date, count=s.count) for s in stats]
+
 @app.get("/api/admin/users", response_model=UserListResponse)
 async def get_users(user_id: int = Query(...), filter_type: str = Query("all"), db: Session = Depends(get_db)):
     """
@@ -818,12 +847,6 @@ async def background_deletion_task():
         # Проверяем каждые 10 секунд (для теста)
         await asyncio.sleep(10)
 
-@app.on_event("startup")
-async def startup_event():
-    init_db()
-    # Фоновая задача удаления треков временно отключена
-    # asyncio.create_task(background_deletion_task())
-
 # --- Payment Endpoints ---
 
 class CreateStarsInvoiceRequest(BaseModel):
@@ -831,6 +854,7 @@ class CreateStarsInvoiceRequest(BaseModel):
     plan_id: str
     promo_code: Optional[str] = None
     amount: int
+
 @app.post("/api/payment/create-stars-invoice")
 async def create_stars_invoice_with_promo(request: CreateStarsInvoiceRequest, db: Session = Depends(get_db)):
     """Создание invoice для оплаты Telegram Stars с поддержкой промокодов"""
@@ -1012,7 +1036,6 @@ async def debug_grant_premium(
 
 # --- Cache Admin Endpoints ---
 
-
 @app.get("/api/admin/cache/stats", response_model=CacheStats)
 async def get_admin_cache_stats(user_id: int = Query(...), db: Session = Depends(get_db)):
     """Получение статистики кэша (только для админов)"""
@@ -1031,7 +1054,6 @@ async def reset_admin_cache(admin_id: int = Query(...), db: Session = Depends(ge
     
     reset_cache()
     return {"status": "ok", "message": "Cache cleared"}
-
 
 # --- Music Endpoints ---
 
@@ -1158,8 +1180,6 @@ async def search_tracks(
             detail=f"Ошибка при поиске: {str(e)}"
         )
 
-
-
 @app.get("/api/track/{track_id}", response_model=Track)
 async def get_track(track_id: str):
     """
@@ -1169,7 +1189,6 @@ async def get_track(track_id: str):
         status_code=501,
         detail="Получение трека по ID пока не реализовано. Используйте поиск."
     )
-
 
 @app.get("/api/radio")
 async def get_radio_stations():
@@ -1211,7 +1230,6 @@ async def get_radio_stations():
             status_code=500,
             detail=f"Ошибка при получении радиостанций: {str(e)}"
         )
-
 
 @app.get("/api/genre/{genre_id}")
 async def get_genre_tracks(
@@ -1278,8 +1296,6 @@ async def get_genre_tracks(
             detail=f"Ошибка при получении треков жанра: {str(e)}"
         )
 
-
-
 from fastapi.responses import StreamingResponse
 import httpx
 
@@ -1297,7 +1313,7 @@ async def stream_audio_proxy(request: Request, url: str = Query(..., description
     # Load proxies
     import os
     import random
-    proxy_list_str = os.getenv("PROXY_LIST", "")
+    proxy_list_str = os.getenv("PROXY_URLS", "") or os.getenv("PROXY_LIST", "")
     proxy_list = [p.strip() for p in proxy_list_str.split(",") if p.strip()]
     
     proxies = None
@@ -1463,7 +1479,7 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
         
         # Подготовка заголовков для скачивания
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Accept': '*/*',
             'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
         }
@@ -1500,7 +1516,7 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
                 
                 # Подготовка заголовков для обложки
                 cover_headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                     'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
                     'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
                 }
@@ -2265,7 +2281,6 @@ async def get_referral_code(user_id: int = Query(...), db: Session = Depends(get
         ).count()
     }
 
-
 @app.post("/api/referral/register")
 async def register_referral(
     user_id: int = Query(...),
@@ -2313,7 +2328,6 @@ async def register_referral(
         "message": "Referral registered successfully"
     }
 
-
 @app.get("/api/referral/stats")
 async def get_referral_stats(user_id: int = Query(...), db: Session = Depends(get_db)):
     """Get referral statistics for a user"""
@@ -2349,7 +2363,6 @@ async def get_referral_stats(user_id: int = Query(...), db: Session = Depends(ge
         "referrals": referral_list
     }
 
-
 def extend_premium(user: User, days: int, db: Session):
     """Extend user's premium subscription by specified days"""
     from datetime import timedelta
@@ -2368,15 +2381,13 @@ def extend_premium(user: User, days: int, db: Session):
     
     return user.premium_expires_at
 
-
 @app.post("/api/payment/complete")
 async def complete_payment(
     user_id: int = Query(...),
     plan: str = Query(...),  # 'month' or 'year'
     db: Session = Depends(get_db)
 ):
-    """
-    Mark payment as complete and grant premium.
+    """Mark payment as complete and grant premium.
     This should be called from Tribute webhook or payment verification.
     """
     user = db.query(User).filter(User.id == user_id).first()
@@ -2452,7 +2463,6 @@ async def complete_payment(
         "is_premium": True
     }
 
-
 @app.post("/api/admin/promocodes")
 async def create_promo_code(request: PromoCodeCreate, user_id: int = Query(...), db: Session = Depends(get_db)):
     """Создание промокода (только для админов)"""
@@ -2481,7 +2491,6 @@ async def create_promo_code(request: PromoCodeCreate, user_id: int = Query(...),
     
     return {"status": "ok", "promo_code": promo.code}
 
-
 @app.get("/api/admin/promocodes")
 async def get_promo_codes(user_id: int = Query(...), db: Session = Depends(get_db)):
     """Получение списка промокодов (только для админов)"""
@@ -2492,7 +2501,6 @@ async def get_promo_codes(user_id: int = Query(...), db: Session = Depends(get_d
     
     promos = db.query(PromoCode).order_by(PromoCode.created_at.desc()).all()
     return promos
-
 
 @app.delete("/api/admin/promocodes/{promo_id}")
 async def delete_promo_code(promo_id: int, user_id: int = Query(...), db: Session = Depends(get_db)):
@@ -2510,7 +2518,6 @@ async def delete_promo_code(promo_id: int, user_id: int = Query(...), db: Sessio
     db.commit()
     
     return {"status": "ok"}
-
 
 @app.delete("/api/admin/user/{user_id}")
 async def delete_user(user_id: int, admin_id: int = Query(...), db: Session = Depends(get_db)):
@@ -2538,16 +2545,9 @@ async def delete_user(user_id: int, admin_id: int = Query(...), db: Session = De
     
     return {"status": "ok", "message": f"User {user_id} deleted"}
 
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Закрытие ресурсов при остановке приложения"""
-    parser.close()
-
-
 if __name__ == "__main__":
     uvicorn.run(
-        "main:app",
+        "backend.main:app",
         host="0.0.0.0",
         port=8000,
         reload=True

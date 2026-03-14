@@ -19,7 +19,7 @@ class HitmoParser:
     
     def __init__(self):
         # Load proxy list from environment
-        proxy_list_str = os.getenv("PROXY_LIST", "")
+        proxy_list_str = os.getenv("PROXY_URLS", "") or os.getenv("PROXY_LIST", "")
         self.proxy_list = [p.strip() for p in proxy_list_str.split(",") if p.strip()]
         
         # Default headers (fallback)
@@ -155,7 +155,7 @@ class HitmoParser:
 
                         track_id = el.get('data-track-id') or el.get('data-id') or el.get('id')
                         if not track_id:
-                            track_id = f"gen_{abs(hash(artist + title))}"
+                            track_id = f"gen_{abs(hash(f'{artist}|{title}|{duration}|{url}'))}"
 
                         key = f"{track_id}-{title}-{artist}"
                         if key in seen:
@@ -264,7 +264,7 @@ class HitmoParser:
         if cover:
             return cover
         return await self._get_itunes_cover(client, artist, title)
-    
+
     async def get_genre_tracks(self, genre_id: int, limit: int = 20, page: int = 1, user_agent: Optional[str] = None) -> List[Dict]:
         """
         Get tracks from a specific genre (Async)
@@ -274,104 +274,99 @@ class HitmoParser:
             params = {
                 'start': (page - 1) * limit
             }
-            
-            # Prepare headers with custom user agent
+
             headers = self._prepare_headers(user_agent)
-            
-            # Get random proxy if available
+
             proxy = self._get_random_proxy()
             proxies = {"http://": proxy, "https://": proxy} if proxy else None
-            
+
             async with httpx.AsyncClient(
-                headers=headers, 
-                timeout=30.0,  # Increased timeout for slow Hitmo responses
+                headers=headers,
+                timeout=30.0,
                 follow_redirects=True,
                 proxies=proxies
             ) as client:
                 response = await client.get(url, params=params)
                 response.raise_for_status()
-                
+
                 soup = BeautifulSoup(response.text, 'html.parser')
                 tracks_data = []
-                
                 track_elements = soup.select('.tracks__item')
-                
+
                 for el in track_elements:
                     if len(tracks_data) >= limit:
                         break
-                        
+
                     try:
                         title_el = el.select_one('.track__title')
                         artist_el = el.select_one('.track__desc')
                         time_el = el.select_one('.track__fulltime')
                         download_el = el.select_one('a.track__download-btn')
                         cover_el = el.select_one('.track__img')
-                        
+
                         if not (title_el and download_el):
                             continue
-                            
+
                         title = title_el.text.strip()
                         artist = artist_el.text.strip() if artist_el else "Unknown"
                         duration_str = time_el.text.strip() if time_el else "00:00"
-                        
+
                         try:
                             mins, secs = map(int, duration_str.split(':'))
                             duration = mins * 60 + secs
-                        except:
+                        except Exception:
                             duration = 0
-                            
-                        url = download_el.get('href')
-                        if not url:
+
+                        track_url = download_el.get('href')
+                        if not track_url:
                             continue
-                            
-                        url = url.strip().replace('\n', '').replace('\r', '')
-                            
-                        track_id = el.get('data-track-id')
+
+                        track_url = track_url.strip().replace('\n', '').replace('\r', '')
+                        if track_url.startswith('//'):
+                            track_url = f"https:{track_url}"
+                        elif track_url.startswith('/'):
+                            track_url = f"{self.BASE_URL}{track_url}"
+
+                        track_id = el.get('data-track-id') or el.get('data-id') or el.get('id')
                         if not track_id:
-                            track_id = f"gen_{abs(hash(artist + title))}"
-                            
+                            track_id = f"gen_{abs(hash(f'{artist}|{title}|{duration}|{track_url}'))}"
+
                         fallback_image = None
                         if cover_el:
                             style = cover_el.get('style', '')
                             match = re.search(r"url\(['\"]?(.*?)['\"]?\)", style)
                             if match:
                                 fallback_image = match.group(1)
-                        
+
                         tracks_data.append({
                             'id': track_id,
                             'title': title,
                             'artist': artist,
                             'duration': duration,
-                            'url': url,
+                            'url': track_url,
                             'fallback_image': fallback_image,
                             'image': None
                         })
-                        
+
                     except Exception as e:
                         print(f"Error parsing track: {e}")
                         continue
-                
-                # Fetch covers in parallel
-                tasks = []
-                for track in tracks_data:
-                    tasks.append(self._get_best_cover(client, track['artist'], track['title']))
-                
+
+                tasks = [self._get_best_cover(client, track['artist'], track['title']) for track in tracks_data]
                 covers = await asyncio.gather(*tasks)
-                
+
                 final_tracks = []
                 for track, cover in zip(tracks_data, covers):
-                    image = cover
-                    if not image:
-                        image = track['fallback_image']
+                    image = cover or track['fallback_image']
                     if not image:
                         image = f"https://ui-avatars.com/api/?name={urllib.parse.quote(track['artist'])}&size=200&background=random"
-                    
+
                     track['image'] = image
                     del track['fallback_image']
                     final_tracks.append(track)
-                    
+
                 return final_tracks
-                
+
         except Exception as e:
             print(f"Genre tracks error: {e}")
             import traceback

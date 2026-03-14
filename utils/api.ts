@@ -6,11 +6,7 @@
 import { Track, SearchMode } from '../types';
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL;
-
-if (!API_BASE_URL) {
-    throw new Error('VITE_API_URL environment variable is not set');
-}
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 interface SearchResponse {
     results: Track[];
@@ -32,12 +28,9 @@ export const searchTracks = async (
     signal?: AbortSignal
 ): Promise<Track[]> => {
     try {
-        const url = new URL(`${API_BASE_URL}/api/search`);
-        url.searchParams.append('q', query);
-        url.searchParams.append('limit', limit.toString());
-        url.searchParams.append('page', page.toString());
+        const params = new URLSearchParams({ q: query, limit: limit.toString(), page: page.toString() });
 
-        const response = await fetch(url.toString(), {
+        const response = await fetch(`${API_BASE_URL}/api/search?${params}`, {
             headers: {
                 'tuna-skip-browser-warning': 'true'
             },
@@ -87,7 +80,9 @@ export const searchTracks = async (
 
         return mapped;
     } catch (error) {
-        console.error('Search error:', error);
+        if ((error as Error)?.name !== 'AbortError') {
+            console.error('Search error:', error);
+        }
         throw error;
     }
 };
@@ -101,11 +96,9 @@ export const getGenreTracks = async (
     page: number = 1
 ): Promise<Track[]> => {
     try {
-        const url = new URL(`${API_BASE_URL}/api/genre/${genreId}`);
-        url.searchParams.append('limit', limit.toString());
-        url.searchParams.append('page', page.toString());
+        const params = new URLSearchParams({ limit: limit.toString(), page: page.toString() });
 
-        const response = await fetch(url.toString(), {
+        const response = await fetch(`${API_BASE_URL}/api/genre/${genreId}?${params}`, {
             headers: {
                 'tuna-skip-browser-warning': 'true'
             }
@@ -300,11 +293,9 @@ export const downloadToChat = async (userId: number, track: Track): Promise<void
  */
 export const getLyrics = async (trackId: string, title: string, artist: string): Promise<any> => {
     try {
-        const url = new URL(`${API_BASE_URL}/api/lyrics/${trackId}`);
-        url.searchParams.append('title', title);
-        url.searchParams.append('artist', artist);
+        const params = new URLSearchParams({ title, artist });
 
-        const response = await fetch(url.toString());
+        const response = await fetch(`${API_BASE_URL}/api/lyrics/${trackId}?${params}`);
 
         if (!response.ok) {
             if (response.status === 404) {
@@ -319,6 +310,142 @@ export const getLyrics = async (trackId: string, title: string, artist: string):
         return await response.json();
     } catch (error) {
         console.error('Get lyrics error:', error);
+        throw error;
+    }
+};
+
+// --- Recommendations API ---
+
+interface RecommendationResponse {
+    items: any[];
+    cursor: string | null;
+    has_more: boolean;
+    debug?: any;
+}
+
+interface TrackEventPayload {
+    event_type: string;
+    track_id: string;
+    title: string;
+    artist: string;
+    audio_url?: string;
+    cover_url?: string;
+    duration?: number;
+    played_seconds?: number;
+    position_seconds?: number;
+    source?: string;
+    context_type?: string;
+    context_id?: string;
+    session_id?: string;
+}
+
+const _mapRecommendationTrack = (track: any): Track => {
+    let audioUrl = track.url || '';
+    if (audioUrl && audioUrl.startsWith('/')) {
+        audioUrl = `${API_BASE_URL}${audioUrl}`;
+    }
+    let coverUrl = track.image || '';
+    if (coverUrl && coverUrl.startsWith('/')) {
+        coverUrl = `${API_BASE_URL}${coverUrl}`;
+    }
+    return {
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        coverUrl,
+        audioUrl,
+        duration: track.duration || 0,
+        isLocal: false,
+    };
+};
+
+/**
+ * Отправить события активности пользователя
+ */
+export const sendRecommendationEvents = async (
+    events: TrackEventPayload[],
+    userId?: number,
+): Promise<void> => {
+    try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (userId) headers['X-User-Id'] = String(userId);
+
+        await fetch(`${API_BASE_URL}/api/recommendations/events`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ events }),
+        });
+    } catch (error) {
+        console.error('Send recommendation events error:', error);
+    }
+};
+
+/**
+ * Получить персональные рекомендации (Моя волна)
+ */
+export const getPersonalRecommendations = async (
+    limit: number = 20,
+    cursor?: string | null,
+    userId?: number,
+): Promise<{ tracks: Track[]; cursor: string | null; hasMore: boolean }> => {
+    try {
+        const params = new URLSearchParams({ limit: limit.toString() });
+        if (cursor) params.append('cursor', cursor);
+
+        const headers: Record<string, string> = { 'tuna-skip-browser-warning': 'true' };
+        if (userId) headers['X-User-Id'] = String(userId);
+
+        const response = await fetch(`${API_BASE_URL}/api/recommendations/personal?${params}`, { headers });
+
+        if (!response.ok) {
+            throw new Error('Ошибка при получении рекомендаций');
+        }
+
+        const data: RecommendationResponse = await response.json();
+
+        return {
+            tracks: data.items.map(_mapRecommendationTrack),
+            cursor: data.cursor,
+            hasMore: data.has_more,
+        };
+    } catch (error) {
+        console.error('Personal recommendations error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Получить рекомендации радио по треку
+ */
+export const getRadioRecommendations = async (
+    artist: string,
+    title: string,
+    limit: number = 20,
+    cursor?: string | null,
+    userId?: number,
+): Promise<{ tracks: Track[]; cursor: string | null; hasMore: boolean }> => {
+    try {
+        const params = new URLSearchParams({ artist, title, limit: limit.toString() });
+        if (cursor) params.append('cursor', cursor);
+
+        const headers: Record<string, string> = { 'tuna-skip-browser-warning': 'true' };
+        if (userId) headers['X-User-Id'] = String(userId);
+
+        const response = await fetch(`${API_BASE_URL}/api/recommendations/radio?${params}`, { headers });
+
+        if (!response.ok) {
+            throw new Error('Ошибка при получении радио рекомендаций');
+        }
+
+        const data: RecommendationResponse = await response.json();
+
+        return {
+            tracks: data.items.map(_mapRecommendationTrack),
+            cursor: data.cursor,
+            hasMore: data.has_more,
+        };
+    } catch (error) {
+        console.error('Radio recommendations error:', error);
         throw error;
     }
 };

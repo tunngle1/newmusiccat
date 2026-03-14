@@ -7,6 +7,11 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
 node_modules
 dist
 dist-ssr
@@ -15,6 +20,7 @@ dist-ssr
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/tasks.json
 .idea
 .DS_Store
 *.suo
@@ -30,5 +36,18 @@ backend/*$py.class
 backend/venv/
 backend/ENV/
 backend/.env
+venv/
+.venv/
+__pycache__/
+
+# Local databases and debug artifacts
+backend/*.db
+backend/debug_*
+backend/scripts/__pycache__/
+backend/tests/__pycache__/
+
+# Legacy folders
+newfront/
 
 .vercel
+.claude-dev-helper/

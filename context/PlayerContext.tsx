@@ -22,6 +22,7 @@ interface PlayerContextType {
 
   // Действия
   playTrack: (track: Track, newQueue?: Track[]) => void;
+  appendToQueue: (tracks: Track[]) => void;
   playRadio: (station: RadioStation) => void;
   togglePlay: () => void;
   nextTrack: () => void;
@@ -211,7 +212,6 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
   useEffect(() => { isShuffleRef.current = isShuffle; }, [isShuffle]);
-  useEffect(() => { isShuffleRef.current = isShuffle; }, [isShuffle]);
   useEffect(() => { searchStateRef.current = searchState; }, [searchState]);
 
   const downloadedTracksRef = useRef(downloadedTracks);
@@ -246,8 +246,6 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           hasMore: newTracks.length >= 20,
           isSearching: false
         }));
-
-        setQueue(prev => [...prev, ...newTracks]);
       } else {
         setSearchState(prev => ({ ...prev, hasMore: false, isSearching: false }));
       }
@@ -698,6 +696,20 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setCurrentRadio(null);
     setIsRadioMode(false);
     setIsPlaying(true);
+  };
+
+  const appendToQueue = (tracks: Track[]) => {
+    if (!tracks.length) return;
+    setQueue(prev => {
+      const seen = new Set(prev.map(t => t.audioUrl || `${t.artist}|||${t.title}|||${t.duration}`));
+      const additions = tracks.filter(t => {
+        const key = t.audioUrl || `${t.artist}|||${t.title}|||${t.duration}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      return additions.length > 0 ? [...prev, ...additions] : prev;
+    });
   };
 
   const playRadio = (station: RadioStation) => {
@@ -1299,6 +1311,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       downloadQueue: downloadQueueState,
       isShuffle,
       playTrack,
+      appendToQueue,
       playRadio,
       togglePlay,
       nextTrack,

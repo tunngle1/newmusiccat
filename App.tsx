@@ -42,8 +42,13 @@ import { API_BASE_URL } from './constants';
 import AdminView from './views/AdminView';
 
 import SubscriptionView from './views/SubscriptionView';
+import RadioTabView from './views/RadioTabView';
+import HomeTabView from './views/HomeTabView';
+import LibraryTabView from './views/LibraryTabView';
+import PlaylistsTabView from './views/PlaylistsTabView';
 import { fetchLyrics } from './utils/lyricsClient';
 import { deduplicateTracks } from './utils/deduplication';
+import { useRecommendations } from './hooks/useRecommendations';
 
 const PRESET_GENRES = [
   { name: 'HIP-HOP', genreId: 3, seed: 'hiphop' },
@@ -120,6 +125,8 @@ const NewDesignApp: React.FC = () => {
     nextTrack,
     prevTrack,
     playTrack,
+    queue,
+    appendToQueue,
     duration,
     currentTime,
     seek,
@@ -162,6 +169,9 @@ const NewDesignApp: React.FC = () => {
   const [isCoverColor, setIsCoverColor] = useState(false);
   const [recentTracks, setRecentTracks] = useState<Track[]>([]);
   const [isLoadMoreLoading, setIsLoadMoreLoading] = useState(false);
+  const wave = useRecommendations(user?.id);
+  const [isWaveMode, setIsWaveMode] = useState(false);
+  const [isWaveAutoloading, setIsWaveAutoloading] = useState(false);
   const [playlistSelectionTrack, setPlaylistSelectionTrack] = useState<Track | null>(null);
   const [moveFromPlaylistId, setMoveFromPlaylistId] = useState<string | null>(null);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
@@ -403,13 +413,14 @@ const NewDesignApp: React.FC = () => {
         }
 
         const combined = [...prev.results, ...newResults];
-        const unique = deduplicateTracks(combined, 3);
+        const unique = deduplicateTracks(combined, 5);
+        const addedCount = unique.length - prev.results.length;
         return {
           ...prev,
           results: unique,
           isSearching: false,
           page: nextPage,
-          hasMore: newResults.length > 0
+          hasMore: newResults.length > 0 && addedCount > 0
         };
       });
     } catch (e) {
@@ -455,7 +466,7 @@ const NewDesignApp: React.FC = () => {
   useEffect(() => {
     const query = searchState.query.trim();
     const mode = searchState.searchMode as SearchMode;
-    if (!query) {
+    if (!query && !searchState.genreId) {
       setSearchState((prev) => ({
         ...prev,
         results: [],
@@ -467,6 +478,10 @@ const NewDesignApp: React.FC = () => {
       return;
     }
 
+    if (!query) {
+      return;
+    }
+
     let cancelled = false;
     const controller = new AbortController();
 
@@ -475,17 +490,25 @@ const NewDesignApp: React.FC = () => {
         setSearchState((prev) => ({ ...prev, isSearching: true, error: null, page: 1, results: [] }));
         try {
           const results = await searchTracks(query, 20, 1, mode, controller.signal);
-          const unique = deduplicateTracks(results, 3);
+          const unique = deduplicateTracks(results, 5);
+          const addedCount = unique.length;
           if (cancelled) return;
           setSearchState((prev) => ({
             ...prev,
             results: unique,
             isSearching: false,
-            hasMore: results.length > 0,
+            hasMore: results.length > 0 && addedCount > 0,
             page: 1
           }));
         } catch (e: any) {
-          if (cancelled || e?.name === 'AbortError') return;
+          if (cancelled) return;
+          if (e?.name === 'AbortError') {
+            setSearchState((prev) => ({
+              ...prev,
+              isSearching: false
+            }));
+            return;
+          }
           setSearchState((prev) => ({
             ...prev,
             isSearching: false,
@@ -501,7 +524,7 @@ const NewDesignApp: React.FC = () => {
       cancelled = true;
       controller.abort();
     };
-  }, [searchState.query, searchState.searchMode, setSearchState]);
+  }, [searchState.query, searchState.searchMode, searchState.genreId, setSearchState]);
 
   // Keep focus on the search input when typing, even after re-render
   useEffect(() => {
@@ -515,7 +538,123 @@ const NewDesignApp: React.FC = () => {
 
   const handleTrackSelect = (track: Track, queue?: Track[]) => {
     playTrack(track, queue || allTracksSafe);
+    wave.sendEvent({
+      event_type: 'play',
+      track_id: track.id,
+      title: track.title,
+      artist: track.artist,
+      audio_url: track.audioUrl,
+      cover_url: track.coverUrl,
+      duration: track.duration,
+      source: 'user_select',
+    });
   };
+
+  const handleStartWave = useCallback(async () => {
+    if (wave.isLoading) return;
+
+    let waveQueue = wave.tracks;
+
+    if (waveQueue.length === 0) {
+      await wave.loadPersonal();
+      return;
+    }
+
+    if (!waveQueue.length) return;
+
+    const firstTrack = waveQueue[0];
+    playTrack(firstTrack, waveQueue);
+    setIsWaveMode(true);
+    wave.sendEvent({
+      event_type: 'radio_start',
+      track_id: firstTrack.id,
+      title: firstTrack.title,
+      artist: firstTrack.artist,
+      audio_url: firstTrack.audioUrl,
+      cover_url: firstTrack.coverUrl,
+      duration: firstTrack.duration,
+      source: 'wave_start',
+      context_type: 'my_wave',
+    });
+  }, [playTrack, wave]);
+
+  useEffect(() => {
+    if (!isWaveMode || !currentTrack || isRadioMode || isWaveAutoloading || wave.isLoading || !wave.hasMore) {
+      return;
+    }
+
+    const currentIndex = queue.findIndex(t => t.id === currentTrack.id);
+    if (currentIndex === -1) return;
+
+    const remainingTracks = queue.length - currentIndex - 1;
+    if (remainingTracks > 1) return;
+
+    let cancelled = false;
+
+    const loadMoreWave = async () => {
+      setIsWaveAutoloading(true);
+      try {
+        const prevLength = wave.tracks.length;
+        await wave.loadMore();
+        if (cancelled) return;
+
+        const nextTracks = wave.tracks.slice(prevLength);
+        if (nextTracks.length > 0) {
+          appendToQueue(nextTracks);
+        }
+      } finally {
+        if (!cancelled) setIsWaveAutoloading(false);
+      }
+    };
+
+    loadMoreWave();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isWaveMode, currentTrack, isRadioMode, isWaveAutoloading, wave, queue, appendToQueue]);
+
+  // Instrumented favorite toggle — sends like/unlike event
+  const handleToggleFavorite = useCallback((track: Track) => {
+    const isFav = favorites.some(t => t.id === track.id);
+    toggleFavorite(track);
+    wave.sendEvent({
+      event_type: isFav ? 'unlike' : 'like',
+      track_id: track.id,
+      title: track.title,
+      artist: track.artist,
+      audio_url: track.audioUrl,
+      cover_url: track.coverUrl,
+      duration: track.duration,
+      source: 'favorite_toggle',
+    });
+  }, [favorites, toggleFavorite, wave]);
+
+  // Instrumented skip — sends skip event for current track before switching
+  const handleNextTrack = useCallback(() => {
+    if (currentTrack && currentTime < (duration * 0.85)) {
+      wave.sendEvent({
+        event_type: 'skip',
+        track_id: currentTrack.id,
+        title: currentTrack.title,
+        artist: currentTrack.artist,
+        audio_url: currentTrack.audioUrl,
+        duration: currentTrack.duration,
+        played_seconds: Math.floor(currentTime),
+      });
+    } else if (currentTrack) {
+      wave.sendEvent({
+        event_type: 'complete',
+        track_id: currentTrack.id,
+        title: currentTrack.title,
+        artist: currentTrack.artist,
+        audio_url: currentTrack.audioUrl,
+        duration: currentTrack.duration,
+        played_seconds: Math.floor(currentTime),
+      });
+    }
+    nextTrack();
+  }, [currentTrack, currentTime, duration, nextTrack, wave]);
 
   const handleDownloadToApp = (track: Track) => {
     if (downloadedTracks.has(track.id)) return;
@@ -583,84 +722,18 @@ const NewDesignApp: React.FC = () => {
 
   const renderRadio = () => {
     return (
-      <div className="flex flex-col h-full">
-
-
-        <div className="px-4 pb-4 space-y-4">
-          {radioLoading && (
-            <div className="text-center text-lebedev-gray uppercase font-bold tracking-widest">Загружаем станции...</div>
-          )}
-          {radioError && (
-            <div className="text-center text-lebedev-red uppercase font-bold tracking-widest">{radioError}</div>
-          )}
-          {!radioLoading && !radioError && radioStations.length === 0 && (
-            <div className="text-center text-lebedev-gray uppercase font-bold tracking-widest opacity-60">Станций нет</div>
-          )}
-
-          <div className="-mx-4 w-[calc(100%+32px)] divide-y divide-lebedev-white/20">
-            {[...radioStations]
-              .sort((a, b) => {
-                const favA = favoriteRadios.has(a.id) ? 1 : 0;
-                const favB = favoriteRadios.has(b.id) ? 1 : 0;
-                return favB - favA;
-              })
-              .map((station, idx, arr) => {
-                const isFav = favoriteRadios.has(station.id);
-                const isActive = currentRadio?.id === station.id && isRadioMode;
-                const isLast = idx === arr.length - 1;
-                return (
-                  <div
-                    key={station.id}
-                    className={`flex items-center justify-between px-4 py-4 cursor-pointer hover:bg-lebedev-white/10 transition-colors border-b border-lebedev-white/20 ${isActive ? 'bg-lebedev-white/10' : ''
-                      } ${isLast ? 'border-b-0' : ''}`}
-                    onClick={() => {
-                      if (isActive && isPlaying) {
-                        togglePlay();
-                      } else {
-                        playRadio(station);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center gap-3 flex-1 min-w-0 px-4">
-                      <div className="flex flex-col min-w-0">
-                        <div className="text-sm font-black uppercase truncate">{station.name}</div>
-                        <div className="text-[11px] uppercase text-lebedev-gray truncate">{station.genre}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 min-w-[200px] justify-end">
-                      <span className={`text-[11px] font-black uppercase min-w-[38px] text-center ${isActive && isPlaying ? 'text-[#ef4444]' : 'text-transparent'}`}>
-                        Live
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleFavoriteRadio(station.id);
-                        }}
-                        className={`p-2 rounded-full transition-colors shrink-0 ${isFav ? 'text-white' : 'text-lebedev-gray hover:text-white'}`}
-                        title="Избранное радио"
-                      >
-                        <HeartIcon className={`w-4 h-4 ${isFav ? 'fill-white' : ''}`} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isActive && isPlaying) {
-                            togglePlay();
-                          } else {
-                            playRadio(station);
-                          }
-                        }}
-                        className="px-3 py-1 text-[11px] font-bold uppercase bg-lebedev-white text-lebedev-black hover:bg-lebedev-red hover:text-white transition-colors min-w-[82px] text-center"
-                      >
-                        {isActive && isPlaying ? 'Пауза' : 'Слушать'}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      </div>
+      <RadioTabView
+        radioStations={radioStations}
+        radioLoading={radioLoading}
+        radioError={radioError}
+        favoriteRadios={favoriteRadios}
+        currentRadio={currentRadio}
+        isRadioMode={isRadioMode}
+        isPlaying={isPlaying}
+        togglePlay={togglePlay}
+        playRadio={playRadio}
+        toggleFavoriteRadio={toggleFavoriteRadio}
+      />
     );
   };
 
@@ -804,7 +877,7 @@ const NewDesignApp: React.FC = () => {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  toggleFavorite(track);
+                  handleToggleFavorite(track);
                 }}
                 className="p-1.5 rounded-full hover:bg-lebedev-red hover:text-white transition-colors text-gray-200"
                 title="Удалить из избранного"
@@ -870,412 +943,52 @@ const NewDesignApp: React.FC = () => {
   };
 
   const renderHome = () => {
-    const isSearching = Boolean(searchState.query.trim()) || Boolean(searchState.genreId);
-    const searchResults = searchState.results;
-    const baseTracks = allTracksSafe;
-    const visibleTracks = isSearching ? searchResults : baseTracks;
-
-    if (isSearching) {
-      return (
-        <>
-          <div className="p-0 border-b-2 border-lebedev-white bg-lebedev-black shrink-0">
-            <div className="relative group flex items-center">
-              <div className="pl-4 text-lebedev-gray">
-                <SearchIcon className="w-5 h-5" />
-              </div>
-              <input
-                type="text"
-                ref={searchInputRef}
-                value={searchState.query}
-                onChange={(e) =>
-                  setSearchState((prev) => ({
-                    ...prev,
-                    query: e.target.value,
-                    results: [],
-                    page: 1,
-                    hasMore: true
-                  }))
-                }
-                placeholder="Искать..."
-                className="w-full bg-transparent text-lg p-4 uppercase placeholder-lebedev-gray/40 focus:outline-none text-lebedev-white font-bold tracking-wide rounded-none"
-              />
-            </div>
-            <div className="flex bg-lebedev-black">
-              {[
-                { id: 'all', label: 'Все' },
-                { id: 'artist', label: 'Артист' },
-                { id: 'track', label: 'Название' }
-              ].map((mode) => (
-                <button
-                  key={mode.id}
-                  onClick={() =>
-                    setSearchState((prev) => ({
-                      ...prev,
-                      searchMode: mode.id as SearchMode,
-                      results: [],
-                      page: 1,
-                      hasMore: true
-                    }))
-                  }
-                  className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-colors ${searchState.searchMode === mode.id
-                    ? 'text-white border-lebedev-red'
-                    : 'text-lebedev-gray border-transparent hover:text-white hover:border-lebedev-white/30'
-                    }`}
-                >
-                  {mode.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="grid grid-cols-1 divide-y divide-lebedev-white/20">
-            {searchState.isSearching && searchState.results.length === 0 && (
-              <div className="p-8 text-center text-lebedev-gray text-sm uppercase font-bold tracking-widest opacity-60">
-                <span className="inline-flex items-center gap-2">
-                  Поиск
-                  <span className="loading-dots-bounce">
-                    <span className="loading-dot" />
-                    <span className="loading-dot" />
-                    <span className="loading-dot" />
-                  </span>
-                </span>
-              </div>
-            )}
-            {searchState.error && (
-              <div className="p-8 text-center text-lebedev-red text-sm uppercase font-bold tracking-widest opacity-80">
-                {searchState.error}
-              </div>
-            )}
-            {!searchState.isSearching && visibleTracks.length === 0 && (
-              <div className="p-8 text-center text-lebedev-gray text-xl uppercase font-bold tracking-widest opacity-50">
-                Ничего не найдено.
-              </div>
-            )}
-            {visibleTracks.map((track, idx) => renderTrackItem(track, idx, visibleTracks))}
-
-            {searchState.hasMore && visibleTracks.length > 0 && (
-              <div className="p-6 text-center">
-                <button
-                  onClick={loadMoreSearch}
-                  className="px-6 py-3 font-black uppercase tracking-widest rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                  disabled={searchState.isSearching || isLoadMoreLoading}
-                  style={{ color: '#ef4444' }}
-                >
-                  {isLoadMoreLoading ? (
-                    <span className="loading-dots">
-                      <span className="loading-dot" />
-                      <span className="loading-dot" />
-                      <span className="loading-dot" />
-                    </span>
-                  ) : (
-                    'Еще'
-                  )}
-                </button>
-              </div>
-            )}
-          </div>
-        </>
-      );
-    }
-
     return (
-      <div className="flex flex-col h-full">
-        <div className="p-4 border-b border-lebedev-white bg-lebedev-black">
-          <div className="relative group flex items-center bg-lebedev-white/10 p-2 border border-transparent hover:border-lebedev-white/30 transition-colors">
-            <SearchIcon className="w-5 h-5 text-lebedev-gray ml-2" />
-            <input
-              type="text"
-              ref={searchInputRef}
-              value={searchState.query}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSearchState((prev) => ({ ...prev, query: val }));
-              }}
-              placeholder="Искать..."
-              className="w-full bg-transparent p-2 uppercase placeholder-lebedev-gray/40 focus:outline-none text-lebedev-white font-bold"
-            />
-          </div>
-        </div>
-
-        {recentTracks.length > 0 && (
-          <div>
-            <div className="px-4 mb-4 flex items-center gap-2">
-              <div className="w-2 h-2 bg-lebedev-red animate-pulse" />
-              <h2 className="text-xl font-black uppercase tracking-widest">История</h2>
-            </div>
-            <div
-              className="flex overflow-x-auto gap-4 px-4 pb-4 snap-x snap-mandatory"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-            >
-              {recentTracks.map((track) => (
-                <div
-                  key={`${track.id} -recent`}
-                  onClick={() => handleTrackSelect(track, recentTracks)}
-                  className="snap-start shrink-0 w-64 cursor-pointer group"
-                >
-                  <div className="aspect-square border-2 border-lebedev-white mb-3 relative overflow-hidden bg-lebedev-white/5">
-                    <img
-                      src={getCover(track)}
-                      className={`w-full h-full object-cover ${isCoverColor ? '' : 'grayscale'} group-hover:grayscale-0 transition-all duration-500`}
-                    />
-                    <div className="absolute bottom-0 right-0 bg-lebedev-black text-white text-[10px] font-bold px-2 py-1 border-t border-l border-lebedev-white">
-                      {formatSeconds(track.duration)}
-                    </div>
-                    <div className="absolute top-0 left-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="bg-lebedev-red rounded-full p-2 text-white shadow-lg">
-                        <PlayIcon className="w-4 h-4 fill-current" />
-                      </div>
-                    </div>
-                  </div>
-                  <h3 className="font-bold uppercase truncate text-lg leading-none mb-1 group-hover:text-lebedev-red transition-colors">
-                    {track.title}
-                  </h3>
-                  <p className="text-xs uppercase truncate" style={{ color: '#ef4444' }}>{track.artist}</p>
-                </div>
-              ))}
-              <div className="w-2 shrink-0" />
-            </div>
-          </div>
-        )}
-
-        {genres.length > 0 && (
-          <div className="px-4">
-            <h2 className="text-xl font-black uppercase tracking-widest mb-4 border-b border-lebedev-white/20 pb-2">Жанры</h2>
-            <div className="grid grid-cols-2 gap-4">
-              {genres.map((genre) => (
-                <div
-                  key={genre.name}
-                  onClick={async () => {
-                    setSelectedGenre(genre.name);
-                    setSearchState(prev => ({
-                      ...prev,
-                      isSearching: true,
-                      results: [],
-                      genreId: genre.genreId || null,
-                      page: 1,
-                      error: null,
-                      query: ''
-                    }));
-
-                    try {
-                      const results = genre.genreId
-                        ? await getGenreTracks(genre.genreId, 20, 1)
-                        : [];
-                      setSearchState(prev => ({
-                        ...prev,
-                        results,
-                        isSearching: false,
-                        hasMore: results.length > 0,
-                        error: results.length === 0 ? 'Нет треков по этому жанру' : null
-                      }));
-                    } catch (err) {
-                      console.error('Genre fetch error:', err);
-                      setSearchState(prev => ({
-                        ...prev,
-                        isSearching: false,
-                        error: 'Не удалось загрузить жанр'
-                      }));
-                    }
-                  }}
-                  className="aspect-[3/2] border border-lebedev-white relative overflow-hidden group cursor-pointer"
-                >
-                  <img
-                    src={`/genres/${genre.seed}.jpg`}
-                    alt={genre.name}
-                    className={`absolute inset-0 w-full h-full object-cover ${isCoverColor ? '' : 'grayscale'} brightness-50 group-hover:scale-110 group-hover:brightness-75 group-hover:grayscale-0 transition-all duration-700 ease-out`}
-                  />
-                  < div className="absolute inset-0 flex items-center justify-center z-10" >
-                    <span className="font-black uppercase text-xl tracking-tighter text-white mix-blend-difference group-hover:scale-110 transition-transform duration-300">
-                      {genre.name}
-                    </span>
-                  </div >
-                  <div className="absolute top-2 right-2 flex gap-0.5 z-20">
-                    <div className="w-1 h-1 bg-lebedev-red" />
-                    <div className="w-1 h-1 bg-lebedev-white" />
-                  </div>
-                </div >
-              ))}
-            </div >
-          </div >
-        )}
-
-        {
-          selectedGenre && (
-            <div className="flex flex-col h-full">
-              <button
-                onClick={() => setSelectedGenre(null)}
-                className="p-4 flex items-center gap-2 font-bold uppercase hover:text-lebedev-red transition-colors sticky top-0 bg-lebedev-black z-20 border-b border-lebedev-white"
-              >
-                <ChevronDownIcon className="w-6 h-6 rotate-90" /> Назад
-              </button>
-              <div className="p-6 border-b border-lebedev-white bg-lebedev-white text-lebedev-black sticky top-[57px] z-10">
-                <h2 className="text-4xl font-black uppercase tracking-tighter">{selectedGenre}</h2>
-                <p className="text-xs uppercase tracking-widest font-bold mt-1 opacity-60">
-                  {visibleTracks.length} треков
-                </p>
-              </div>
-              <div className="divide-y divide-lebedev-white/20 pb-8">
-                {visibleTracks.map((t, i) => renderTrackItem(t, i, visibleTracks))}
-              </div>
-            </div>
-          )
-        }
-      </div >
+      <HomeTabView
+        searchState={searchState}
+        setSearchState={setSearchState}
+        searchInputRef={searchInputRef}
+        allTracks={allTracksSafe}
+        recentTracks={recentTracks}
+        genres={genres}
+        selectedGenre={selectedGenre}
+        setSelectedGenre={setSelectedGenre}
+        isCoverColor={isCoverColor}
+        isLoadMoreLoading={isLoadMoreLoading}
+        loadMoreSearch={loadMoreSearch}
+        handleTrackSelect={handleTrackSelect}
+        renderTrackItem={renderTrackItem}
+        waveTracks={wave.tracks}
+        waveLoading={wave.isLoading}
+        waveError={wave.error}
+        onLoadWave={wave.loadPersonal}
+        onStartWave={handleStartWave}
+      />
     );
   };
 
-  const renderPlaylists = () => {
-    const selectedPlaylist = playlists.find(p => p.id === selectedPlaylistId) || null;
-    const playlistTracks = selectedPlaylist
-      ? selectedPlaylist.trackIds
-        .map(id => allTracks.find(t => t.id === id))
-        .filter(Boolean) as Track[]
-      : [];
-
-    return (
-      <div className="flex flex-col h-full">
-        {selectedPlaylist && (
-          <div className="p-6 border-b-2 border-lebedev-white flex justify-end items-center bg-lebedev-black sticky top-0 z-10 gap-3">
-            {playlistTracks.length > 0 && (
-              <button
-                onClick={() => {
-                  downloadPlaylistToChat(selectedPlaylist.name, playlistTracks);
-                }}
-                className="p-2 rounded-full hover:bg-lebedev-red/20 transition-colors group"
-                title="Скачать плейлист в чат"
-              >
-                <SendIcon className="w-6 h-6 text-lebedev-red group-hover:scale-110 transition-transform" />
-              </button>
-            )}
-            <button
-              onClick={() => {
-                setEditPlaylistTitle(selectedPlaylist.name);
-                setEditPlaylistCover(null);
-                setIsPlaylistEditOpen(true);
-              }}
-              className="p-2 rounded-full hover:bg-lebedev-white/10 transition-colors"
-            >
-              <MenuIcon className="w-6 h-6" />
-            </button>
-          </div>
-        )}
-
-        {!selectedPlaylist ? (
-          <div className="p-4 grid grid-cols-2 gap-4">
-            {playlists.length === 0 ? (
-              <div className="col-span-2 text-center py-12 text-lebedev-gray opacity-50 uppercase font-bold tracking-widest">
-                Пусто. Создайте первый плейлист.
-              </div>
-            ) : (
-              playlists.map((pl) => (
-                <div
-                  key={pl.id}
-                  className="group cursor-pointer"
-                  onClick={() => {
-                    setSelectedPlaylistId(pl.id);
-                  }}
-                >
-                  <div className="aspect-square border border-lebedev-white mb-2 relative overflow-hidden">
-                    {pl.coverUrl ? (
-                      <img
-                        src={pl.coverUrl}
-                        className={`w-full h-full object-cover ${isCoverColor ? '' : 'grayscale'} brightness-75 group-hover:scale-110 group-hover:brightness-100 group-hover:grayscale-0 transition-all duration-700 ease-out`}
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-lebedev-white/10 flex items-center justify-center">
-                        <PlaylistIcon className="w-12 h-12 text-lebedev-gray" />
-                      </div>
-                    )}
-                    <div className="absolute bottom-0 left-0 bg-lebedev-black/80 px-2 py-1 text-xs font-mono text-lebedev-red">
-                      {pl.trackIds.length} треков
-                    </div>
-                  </div>
-                  <h3 className="font-bold uppercase truncate">{pl.name}</h3>
-                </div>
-              ))
-            )}
-          </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto flex flex-col">
-            <div className="p-4 border-b border-lebedev-white bg-lebedev-black sticky top-0 z-10 flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <PlaylistIcon className="w-5 h-5 text-lebedev-gray" />
-                <span className="text-xs font-bold uppercase tracking-widest text-lebedev-gray">
-                  {playlistTracks.length} треков
-                </span>
-              </div>
-            </div>
-            <div className="divide-y divide-lebedev-white/20">
-              {playlistTracks.length === 0 ? (
-                <div className="p-8 text-center text-lebedev-gray text-xl uppercase font-bold tracking-widest opacity-50">
-                  В этом плейлисте пока нет треков.
-                </div>
-              ) : (
-                playlistTracks.map((track, idx) => renderTrackItem(track, idx, playlistTracks, { playlistId: selectedPlaylist.id }))
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
+  const renderPlaylists = () => (
+    <PlaylistsTabView
+      playlists={playlists}
+      allTracks={allTracks}
+      selectedPlaylistId={selectedPlaylistId}
+      setSelectedPlaylistId={setSelectedPlaylistId}
+      isCoverColor={isCoverColor}
+      downloadPlaylistToChat={downloadPlaylistToChat}
+      setEditPlaylistTitle={setEditPlaylistTitle}
+      setEditPlaylistCover={setEditPlaylistCover}
+      setIsPlaylistEditOpen={setIsPlaylistEditOpen}
+      renderTrackItem={renderTrackItem}
+    />
+  );
 
   const renderLibrary = () => (
-    <div className="flex flex-col min-h-full">
-      {/* YouTube Section with "Coming Soon" overlay */}
-      <div className="relative p-6 border-b-4 border-lebedev-white bg-lebedev-black">
-        {/* Blurred overlay */}
-        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-10 flex items-center justify-center">
-          <div className="text-center">
-            <div className="text-2xl font-black uppercase tracking-widest text-lebedev-white mb-2">Скоро</div>
-            <div className="text-xs uppercase tracking-widest text-lebedev-gray">Скачивание с YouTube появится позже</div>
-          </div>
-        </div>
-
-        {/* Original YouTube content (blurred behind) */}
-        <div className="flex items-center gap-2 mb-4 text-lebedev-red">
-          <YoutubeIcon className="w-6 h-6" />
-          <span className="text-sm font-black uppercase tracking-widest">YouTube загрузчик</span>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          <input
-            type="text"
-            value={youtubeLink}
-            onChange={(e) => setYoutubeLink(e.target.value)}
-            placeholder="Вставьте ссылку..."
-            className="w-full bg-transparent border-2 border-lebedev-white p-3 text-sm uppercase placeholder-lebedev-gray/50 focus:outline-none focus:border-lebedev-red font-bold"
-            disabled
-          />
-          <button
-            disabled
-            className="w-full p-4 font-black uppercase tracking-widest text-sm bg-lebedev-gray cursor-not-allowed"
-          >
-            Найти
-          </button>
-        </div>
-      </div>
-
-      <div className="p-4 border-b border-lebedev-white/20 bg-lebedev-black sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <LibraryIcon className="w-5 h-5 text-lebedev-gray" />
-          <span className="text-xs font-bold uppercase tracking-widest text-lebedev-gray">
-            Скачано ({libraryTracks.length})
-          </span>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto">
-        {libraryTracks.length === 0 ? (
-          <div className="p-8 text-center text-lebedev-gray text-xl uppercase font-bold tracking-widest opacity-50">
-            Пусто.
-          </div>
-        ) : (
-          <div className="divide-y divide-lebedev-white/10">
-            {libraryTracks.map((track, index) => renderTrackItem(track, index, libraryTracks))}
-          </div>
-        )}
-      </div>
-    </div>
+    <LibraryTabView
+      youtubeLink={youtubeLink}
+      setYoutubeLink={setYoutubeLink}
+      libraryTracks={libraryTracks}
+      renderTrackItem={renderTrackItem}
+    />
   );
 
   const renderPlaceholder = (title: string, desc: string) => (
@@ -1676,7 +1389,7 @@ const NewDesignApp: React.FC = () => {
       if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
         // Double tap detected - toggle favorite with animation
         setShowHeartAnimation(true);
-        toggleFavorite(safeTrack);
+        handleToggleFavorite(safeTrack);
         setTimeout(() => setShowHeartAnimation(false), 800);
         setLastTapTime(0); // Reset to prevent triple tap
         return;
@@ -1704,7 +1417,7 @@ const NewDesignApp: React.FC = () => {
             prevTrack();
           } else {
             // Swipe left → next track
-            nextTrack();
+            handleNextTrack();
           }
         }
       }
@@ -1880,7 +1593,7 @@ const NewDesignApp: React.FC = () => {
               </button>
               <button
                 className="mb-1 text-lebedev-gray hover:text-lebedev-red"
-                onClick={() => toggleFavorite(safeTrack)}
+                onClick={() => handleToggleFavorite(safeTrack)}
                 aria-label="Добавить в избранное"
               >
                 <HeartIcon className={`w-6 h-6 ${isFav ? 'fill-white text-white' : ''}`} />
@@ -2099,7 +1812,7 @@ const NewDesignApp: React.FC = () => {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      nextTrack();
+                      handleNextTrack();
                     }}
                     className="active:scale-90 transition-transform"
                   >
