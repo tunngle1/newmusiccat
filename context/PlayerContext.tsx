@@ -310,10 +310,22 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
         const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
         const telegramStartParam = window.Telegram.WebApp.initDataUnsafe.start_param;
-        const urlStartParam = new URLSearchParams(window.location.search).get('startapp')
-          || new URLSearchParams(window.location.search).get('start');
+        const searchParams = new URLSearchParams(window.location.search);
+        const hashParams = new URLSearchParams(window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash);
+        const urlStartParam = searchParams.get('tgWebAppStartParam')
+          || searchParams.get('startapp')
+          || searchParams.get('start')
+          || hashParams.get('tgWebAppStartParam')
+          || hashParams.get('startapp')
+          || hashParams.get('start');
         const startParam = telegramStartParam || urlStartParam || undefined;
         const normalizedStartParam = startParam?.trim();
+        console.log('Referral launch params:', {
+          telegramStartParam,
+          search: window.location.search,
+          hash: window.location.hash,
+          resolvedStartParam: normalizedStartParam
+        });
         const parsedReferrerId = normalizedStartParam?.startsWith('ref_')
           ? parseInt(normalizedStartParam.replace('ref_', ''))
           : normalizedStartParam?.startsWith('REF')

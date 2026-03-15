@@ -2424,7 +2424,7 @@ async def get_referral_code(user_id: int = Query(...), db: Session = Depends(get
     
     return {
         "code": user.referral_code,
-        "link": f"https://t.me/{bot_username}?start={user.referral_code}",
+        "link": f"https://t.me/{bot_username}/app?startapp={user.referral_code}",
         "referrals_count": db.query(Referral).filter(Referral.referrer_id == user_id).count(),
         "completed_referrals": db.query(Referral).filter(
             Referral.referrer_id == user_id,
