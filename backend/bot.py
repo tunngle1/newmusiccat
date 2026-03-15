@@ -120,11 +120,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         welcome_text = f"👋 Добро пожаловать, {user.first_name}!"
     
+    webapp_url = WEBAPP_URL
+    if referral_code:
+        separator = '&' if '?' in WEBAPP_URL else '?'
+        webapp_url = f"{WEBAPP_URL}{separator}startapp={referral_code}&start={referral_code}"
+    
     # Отправляем кнопку для открытия Mini App
     keyboard = [[
         InlineKeyboardButton(
             "🎵 Открыть приложение",
-            web_app=WebAppInfo(url=WEBAPP_URL)
+            web_app=WebAppInfo(url=webapp_url)
         )
     ]]
     reply_markup = InlineKeyboardMarkup(keyboard)
