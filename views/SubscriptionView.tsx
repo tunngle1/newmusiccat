@@ -149,7 +149,12 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({ onBack, userId }) =
             if (window.Telegram?.WebApp?.openInvoice) {
                 window.Telegram.WebApp.openInvoice(data.invoice_link, async (status) => {
                     if (status === 'paid') {
+                        setPromoError('');
                         await loadSubscriptionStatus();
+                    } else if (status === 'cancelled') {
+                        setPromoError('Оплата отменена');
+                    } else if (status === 'failed') {
+                        setPromoError('Ошибка при оплате Telegram Stars');
                     }
                 });
             } else {

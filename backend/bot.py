@@ -6,7 +6,7 @@ Telegram Bot для музыкального приложения
 import os
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, PreCheckoutQueryHandler, MessageHandler, filters
 from dotenv import load_dotenv
 import httpx
 
@@ -195,6 +195,64 @@ async def send_notification(user_id: int, message: str):
         print(f"Error sending notification to {user_id}: {e}")
 
 
+async def handle_pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.pre_checkout_query
+    if not query:
+        return
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{API_BASE_URL}/api/webhook/telegram",
+                json={
+                    "pre_checkout_query": {
+                        "id": query.id,
+                        "from": {"id": query.from_user.id},
+                        "currency": query.currency,
+                        "total_amount": query.total_amount,
+                        "invoice_payload": query.invoice_payload,
+                    }
+                },
+            )
+
+        if response.status_code != 200:
+            print(f"Pre-checkout backend returned non-200: {response.status_code}")
+    except Exception as e:
+        print(f"Error handling pre_checkout_query: {e}")
+
+
+async def handle_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.effective_message
+    if not message or not message.successful_payment:
+        return
+
+    payment = message.successful_payment
+
+    try:
+        payload = {
+            "message": {
+                "from": {"id": update.effective_user.id if update.effective_user else None},
+                "chat": {"id": update.effective_chat.id if update.effective_chat else None},
+                "successful_payment": {
+                    "currency": payment.currency,
+                    "total_amount": payment.total_amount,
+                    "invoice_payload": payment.invoice_payload,
+                    "telegram_payment_charge_id": payment.telegram_payment_charge_id,
+                    "provider_payment_charge_id": payment.provider_payment_charge_id,
+                },
+            }
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(f"{API_BASE_URL}/api/webhook/telegram", json=payload)
+            response.raise_for_status()
+
+        await message.reply_text("⭐ Оплата прошла успешно! Premium активирован.")
+    except Exception as e:
+        print(f"Error handling successful payment: {e}")
+        await message.reply_text("Оплата получена, но возникла ошибка при активации. Напишите в поддержку.")
+
+
 def main():
     """Запуск бота"""
     if not BOT_TOKEN:
@@ -210,6 +268,8 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("premium", premium_status))
     application.add_handler(CommandHandler("referral", referral_stats))
+    application.add_handler(PreCheckoutQueryHandler(handle_pre_checkout_query))
+    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, handle_successful_payment))
     
     # Запускаем бота
     print("✅ Bot is running!")

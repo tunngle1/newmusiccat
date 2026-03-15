@@ -97,7 +97,15 @@ const PaymentView: React.FC<PaymentViewProps> = ({ user, onClose }) => {
             if (!response.ok || !data.invoice_link) throw new Error(data.detail || 'Failed to create Stars invoice');
 
             if (window.Telegram?.WebApp?.openInvoice) {
-                window.Telegram.WebApp.openInvoice(data.invoice_link, () => {});
+                window.Telegram.WebApp.openInvoice(data.invoice_link, (status) => {
+                    if (status === 'paid') {
+                        setPromoMessage({ type: 'success', text: 'Оплата прошла успешно. Premium активирован.' });
+                    } else if (status === 'cancelled') {
+                        setPromoMessage({ type: 'error', text: 'Оплата отменена' });
+                    } else if (status === 'failed') {
+                        setPromoMessage({ type: 'error', text: 'Ошибка оплаты Telegram Stars' });
+                    }
+                });
             } else {
                 window.open(data.invoice_link, '_blank');
             }

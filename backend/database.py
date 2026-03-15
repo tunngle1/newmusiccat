@@ -38,6 +38,8 @@ class User(Base):
     
     # Premium expiration (for subscription stacking)
     premium_expires_at = Column(DateTime, nullable=True)
+    subscription_expired_at = Column(DateTime, nullable=True)
+    tracks_deletion_scheduled_at = Column(DateTime, nullable=True)
     
     # Referral system
     referral_code = Column(String, unique=True, index=True, nullable=True)
@@ -72,8 +74,14 @@ class Payment(Base):
     amount = Column(String) # Store as string to avoid float precision issues with crypto
     currency = Column(String) # 'TON', 'XTR' (Stars)
     plan = Column(String) # 'month', 'year'
-    status = Column(String) # 'completed', 'failed'
+    status = Column(String) # 'pending', 'completed', 'failed'
     transaction_hash = Column(String, nullable=True) # For TON
+    provider = Column(String, nullable=True)
+    payload = Column(String, unique=True, index=True, nullable=True)
+    telegram_payment_charge_id = Column(String, nullable=True)
+    provider_payment_charge_id = Column(String, nullable=True)
+    raw_data = Column(String, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Referral(Base):

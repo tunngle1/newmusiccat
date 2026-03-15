@@ -15,13 +15,23 @@ import random
 from sqlalchemy.orm import Session
 from datetime import datetime
 from contextlib import asynccontextmanager
+import json
 
 try:
     from backend.hitmo_parser_light import HitmoParser
     from backend.database import User, DownloadedMessage, Lyrics, Payment, Referral, PromoCode, get_db, init_db, SessionLocal
     from backend.cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from backend.lyrics_service import LyricsService
-    from backend.payments import grant_premium_after_payment
+    from backend.payments import (
+        grant_premium_after_payment,
+        get_stars_product,
+        build_stars_payload,
+        parse_stars_payload,
+        create_pending_stars_payment,
+        mark_stars_payment_completed,
+        activate_premium_for_payment,
+        STARS_PRODUCTS,
+    )
     from backend.recommendations.models import UserTrackEvent
     from backend.recommendations.routes import router as recommendations_router, set_parser as set_rec_parser
 except ImportError:
@@ -29,7 +39,16 @@ except ImportError:
     from database import User, DownloadedMessage, Lyrics, Payment, Referral, PromoCode, get_db, init_db, SessionLocal
     from cache import make_cache_key, get_from_cache, set_to_cache, get_cache_stats, reset_cache
     from lyrics_service import LyricsService
-    from payments import grant_premium_after_payment
+    from payments import (
+        grant_premium_after_payment,
+        get_stars_product,
+        build_stars_payload,
+        parse_stars_payload,
+        create_pending_stars_payment,
+        mark_stars_payment_completed,
+        activate_premium_for_payment,
+        STARS_PRODUCTS,
+    )
     from recommendations.models import UserTrackEvent
     from recommendations.routes import router as recommendations_router, set_parser as set_rec_parser
 
@@ -179,6 +198,56 @@ class UserListItem(BaseModel):
 
 class UserListResponse(BaseModel):
     users: List[UserListItem]
+
+
+class StarsProductResponse(BaseModel):
+    id: str
+    title: str
+    description: str
+    amount: int
+    currency: str
+    duration_days: int
+
+
+def apply_promo_to_amount(base_amount: int, promo: Optional[PromoCode]) -> int:
+    final_amount = base_amount
+    if promo:
+        if promo.discount_type == 'percent':
+            final_amount = int(base_amount * (1 - promo.value / 100))
+        elif promo.discount_type == 'fixed':
+            final_amount = max(0, int(base_amount - promo.value))
+    return max(1, final_amount)
+
+
+def complete_stars_payment_record(db: Session, payment: Payment, raw_payment_data: Dict[str, Any]):
+    if payment.status == "completed":
+        return payment
+
+    activated = activate_premium_for_payment(db, payment, "telegram_stars")
+    if not activated:
+        raise HTTPException(status_code=500, detail="Failed to activate premium after payment")
+
+    telegram_charge_id = raw_payment_data.get("telegram_payment_charge_id")
+    provider_charge_id = raw_payment_data.get("provider_payment_charge_id")
+    if payment.raw_data:
+        try:
+            raw_meta = json.loads(payment.raw_data)
+            promo_code = raw_meta.get("promo_code")
+            if promo_code:
+                promo = db.query(PromoCode).filter(PromoCode.code == promo_code).first()
+                if promo:
+                    promo.used_count += 1
+                    db.commit()
+        except Exception as promo_error:
+            print(f"Failed to update promo usage for payment {payment.id}: {promo_error}")
+
+    return mark_stars_payment_completed(
+        db,
+        payment,
+        telegram_charge_id,
+        provider_charge_id,
+        raw_payment_data,
+    )
 
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -853,55 +922,120 @@ class CreateStarsInvoiceRequest(BaseModel):
     user_id: int
     plan_id: str
     promo_code: Optional[str] = None
-    amount: int
+    amount: Optional[int] = None
+
+@app.get("/api/payment/stars-products", response_model=List[StarsProductResponse])
+async def get_stars_products():
+    return [
+        StarsProductResponse(
+            id=plan_id,
+            title=product["title"],
+            description=product["description"],
+            amount=product["amount"],
+            currency="XTR",
+            duration_days=product["days"],
+        )
+        for plan_id, product in STARS_PRODUCTS.items()
+    ]
 
 @app.post("/api/payment/create-stars-invoice")
 async def create_stars_invoice_with_promo(request: CreateStarsInvoiceRequest, db: Session = Depends(get_db)):
     """Создание invoice для оплаты Telegram Stars с поддержкой промокодов"""
     try:
-        # Проверяем промокод если указан
-        final_amount = request.amount
+        user = db.query(User).filter(User.id == request.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        product = get_stars_product(request.plan_id)
+        if not product:
+            raise HTTPException(status_code=400, detail="Unsupported plan")
+
+        promo = None
         if request.promo_code:
             promo = db.query(PromoCode).filter(
-                PromoCode.code == request.promo_code,
+                PromoCode.code == request.promo_code.upper(),
                 PromoCode.is_active == True
             ).first()
-            
-            if promo:
-                if promo.discount_type == 'percent':
-                    final_amount = int(request.amount * (1 - promo.value / 100))
-                elif promo.discount_type == 'fixed':
-                    final_amount = max(0, int(request.amount - promo.value))
-        
-        # Создаем invoice через Telegram Bot API
-        BOT_TOKEN = os.getenv("BOT_TOKEN")
+            if not promo:
+                raise HTTPException(status_code=400, detail="Промокод не найден")
+            if promo.expires_at and promo.expires_at < datetime.utcnow():
+                raise HTTPException(status_code=400, detail="Промокод истёк")
+            if promo.max_uses > 0 and promo.used_count >= promo.max_uses:
+                raise HTTPException(status_code=400, detail="Промокод исчерпан")
+
+        base_amount = product["amount"]
+        final_amount = apply_promo_to_amount(base_amount, promo)
+
+        if request.amount is not None and int(request.amount) != base_amount:
+            print(f"Stars invoice amount mismatch from client ignored: client={request.amount}, expected={base_amount}")
+
+        existing_pending = db.query(Payment).filter(
+            Payment.user_id == request.user_id,
+            Payment.plan == request.plan_id,
+            Payment.status == "pending",
+            Payment.provider == "telegram_stars"
+        ).order_by(Payment.created_at.desc()).first()
+
+        reuse_existing_pending = False
+        if existing_pending:
+            try:
+                existing_meta = json.loads(existing_pending.raw_data) if existing_pending.raw_data else {}
+            except Exception:
+                existing_meta = {}
+
+            existing_promo = existing_meta.get("promo_code")
+            requested_promo = request.promo_code.upper() if request.promo_code else None
+            existing_amount = int(float(existing_pending.amount or 0))
+
+            if existing_promo == requested_promo and existing_amount == final_amount:
+                reuse_existing_pending = True
+
+        if reuse_existing_pending:
+            payload_value = existing_pending.payload
+        else:
+            payload_value = build_stars_payload(request.user_id, request.plan_id, request.promo_code.upper() if request.promo_code else None)
+            create_pending_stars_payment(
+                db,
+                request.user_id,
+                request.plan_id,
+                final_amount,
+                payload_value,
+                request.promo_code.upper() if request.promo_code else None,
+            )
+
+        if not BOT_TOKEN:
+            raise HTTPException(status_code=500, detail="BOT_TOKEN is not configured")
+
         telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/createInvoiceLink"
-        
-        # Определяем название и описание по плану
-        title = "Premium подписка (1 месяц)" if request.plan_id == "month" else "Premium подписка (1 год)"
-        description = "Безлимитное скачивание музыки и доступ к эксклюзивным функциям"
-        
+        title = product["title"]
+        description = product["description"]
+
         payload = {
             "title": title,
             "description": description,
-            "payload": f"{request.user_id}:{request.plan_id}:{request.promo_code or 'none'}",
-            "currency": "XTR",  # Telegram Stars
+            "payload": payload_value,
+            "currency": "XTR",
             "prices": [{"label": "Premium", "amount": final_amount}]
         }
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.post(telegram_url, json=payload)
             data = response.json()
-            
+
             if not data.get("ok"):
                 raise HTTPException(status_code=500, detail=data.get("description", "Failed to create invoice"))
-            
-            print(f"Telegram Stars invoice created user={request.user_id} plan={request.plan_id} amount={final_amount} payload={payload['payload']}")
+
+            print(f"Telegram Stars invoice created user={request.user_id} plan={request.plan_id} amount={final_amount} payload={payload_value}")
             return {
                 "status": "ok",
-                "invoice_link": data["result"]
+                "invoice_link": data["result"],
+                "product_id": request.plan_id,
+                "amount": final_amount,
+                "currency": "XTR"
             }
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/payment/check-promo")
@@ -952,53 +1086,58 @@ async def check_promo_code(request: PromoCodeCheck, db: Session = Depends(get_db
 async def telegram_webhook(update: Dict[str, Any] = Body(...), db: Session = Depends(get_db)):
     """
     Webhook от Bot API для приёма успешных платежей Telegram Stars.
-    Ожидает successful_payment в update.message и invoice_payload вида "user_id:plan[:promo]".
+    Ожидает pre_checkout_query или successful_payment с payload, созданным backend.
     """
     try:
+        pre_checkout_query = update.get("pre_checkout_query")
+        if pre_checkout_query:
+            if not BOT_TOKEN:
+                return {"status": "ignored"}
+
+            parsed_payload = parse_stars_payload(pre_checkout_query.get("invoice_payload", ""))
+            ok = False
+            error_message = "Платёж не найден"
+
+            if parsed_payload:
+                payment = db.query(Payment).filter(Payment.payload == pre_checkout_query.get("invoice_payload", "")).first()
+                if payment and payment.status == "pending":
+                    ok = True
+                    error_message = ""
+
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/answerPreCheckoutQuery",
+                    json={
+                        "pre_checkout_query_id": pre_checkout_query.get("id"),
+                        "ok": ok,
+                        **({"error_message": error_message} if not ok else {}),
+                    },
+                )
+
+            return {"status": "ok" if ok else "rejected"}
+
         message = update.get("message") or {}
         successful_payment = message.get("successful_payment")
         if not successful_payment:
             return {"status": "ignored"}
-        
+
         payload = successful_payment.get("invoice_payload", "") or ""
-        parts = payload.split(":")
-        
-        # user_id и план из payload; fallback на отправителя
-        payload_user_id = None
-        try:
-            payload_user_id = int(parts[0]) if parts else None
-        except Exception:
-            payload_user_id = None
-        
-        plan = parts[1] if len(parts) > 1 and parts[1] in ("month", "year") else None
-        payer_id = message.get("from", {}).get("id") or message.get("chat", {}).get("id")
-        user_id = payload_user_id or payer_id
-        
-        if not user_id:
-            print(f"Telegram Stars: не удалось определить user_id, payload={payload}, payer={payer_id}")
+        payment = db.query(Payment).filter(Payment.payload == payload).first()
+        if not payment:
+            print(f"Telegram Stars: payment not found for payload={payload}")
             return {"status": "ignored"}
-        
+
+        if payment.status == "completed":
+            return {"status": "duplicate"}
+
         amount = successful_payment.get("total_amount", 0) or 0
         currency = (successful_payment.get("currency") or "").upper()
-        
-        # Если план не распознан, определяем по сумме
-        if not plan:
-            if amount >= STARS_PRICE_YEAR:
-                plan = "year"
-            else:
-                plan = "month"
-        
-        # Мягкая проверка суммы
-        expected_amount = STARS_PRICE_MONTH if plan == "month" else STARS_PRICE_YEAR
-        if amount and abs(amount - expected_amount) > 1:
-            print(f"Telegram Stars: сумма не совпадает с тарифом: {amount} vs {expected_amount}")
-        
-        success = grant_premium_after_payment(db, int(user_id), plan, "stars", amount)
-        if success:
-            print(f"Telegram Stars: premium выдан user={user_id} plan={plan} amount={amount} currency={currency} payer={payer_id}")
-        else:
-            print(f"Telegram Stars: не удалось выдать premium user={user_id} plan={plan}")
-        
+        if currency != "XTR":
+            print(f"Telegram Stars: unexpected currency={currency} payload={payload}")
+
+        complete_stars_payment_record(db, payment, successful_payment)
+        print(f"Telegram Stars: premium выдан user={payment.user_id} plan={payment.plan} amount={amount} currency={currency}")
+
         return {"status": "ok"}
     except Exception as e:
         print(f"Telegram webhook error: {e}")
