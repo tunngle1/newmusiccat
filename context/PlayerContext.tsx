@@ -309,7 +309,10 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       // 1. Auth User
       if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
         const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
-        const startParam = window.Telegram.WebApp.initDataUnsafe.start_param;
+        const telegramStartParam = window.Telegram.WebApp.initDataUnsafe.start_param;
+        const urlStartParam = new URLSearchParams(window.location.search).get('startapp')
+          || new URLSearchParams(window.location.search).get('start');
+        const startParam = telegramStartParam || urlStartParam || undefined;
         const referrerId = startParam?.startsWith('ref_')
           ? parseInt(startParam.replace('ref_', ''))
           : startParam?.startsWith('REF')
@@ -333,6 +336,16 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             const data = await response.json();
             console.log("Auth response:", data); // DEBUG LOG
             setUser(data.user);
+
+            if (startParam && data.user?.id && Number.isFinite(referrerId) && referrerId !== data.user.id) {
+              try {
+                await fetch(`${API_BASE_URL}/api/referral/register?user_id=${data.user.id}&referral_code=${encodeURIComponent(startParam)}`, {
+                  method: 'POST'
+                });
+              } catch (referralError) {
+                console.error('Referral registration fallback failed:', referralError);
+              }
+            }
           } else if (response.status === 403) {
             // User is blocked
             console.error("User is blocked");

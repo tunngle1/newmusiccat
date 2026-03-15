@@ -744,6 +744,18 @@ const NewDesignApp: React.FC = () => {
     showToast('Реферальная ссылка скопирована');
   };
 
+  const subscriptionReason = user?.subscription_status?.reason;
+  const subscriptionExpiry = subscriptionReason === 'trial'
+    ? user?.subscription_status?.trial_expires_at
+    : user?.subscription_status?.premium_expires_at;
+  const subscriptionLabel = user?.subscription_status?.has_access
+    ? subscriptionExpiry
+      ? `${subscriptionReason === 'trial' ? 'Доступ активен' : 'Подписка активна'} до ${new Date(subscriptionExpiry).toLocaleDateString('ru')}`
+      : subscriptionReason === 'trial'
+        ? 'Доступ активен 7 дней'
+        : 'Подписка активна'
+    : 'Нет активной подписки';
+
   const handleYoutubeSearch = async () => {
     if (!youtubeLink.trim()) return;
     setIsYoutubeLoading(true);
@@ -1028,9 +1040,7 @@ const NewDesignApp: React.FC = () => {
           <div className="p-6 space-y-4">
             <h3 className="text-xl font-black uppercase tracking-widest">Подписка</h3>
             <p className="text-sm text-lebedev-gray uppercase tracking-wide">
-              {user?.subscription_status?.has_access
-                ? `Активна до ${user.subscription_status.premium_expires_at ? new Date(user.subscription_status.premium_expires_at).toLocaleDateString('ru') : ''}`
-                : 'Нет активной подписки'}
+              {subscriptionLabel}
             </p>
             <button
               onClick={() => {
@@ -1055,7 +1065,7 @@ const NewDesignApp: React.FC = () => {
               <>
                 <div className="p-4 border border-lebedev-white bg-lebedev-white/5">
                   <div className="text-xs font-bold uppercase text-lebedev-gray mb-2">Ваша ссылка</div>
-                  <div className="font-mono text-sm break-all mb-4 text-lebedev-white">{referralCode?.link || 'Загрузка...'}</div>
+                  <div className="font-mono text-sm break-all mb-4 text-lebedev-white">{referralCode?.link || 'Ссылка пока не загружена'}</div>
                   <button
                     onClick={handleCopyReferral}
                     className="w-full p-3 bg-lebedev-white text-lebedev-black font-black uppercase tracking-widest hover:bg-lebedev-red hover:text-white transition-colors inline-flex items-center justify-center gap-2"

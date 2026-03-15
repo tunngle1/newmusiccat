@@ -1823,8 +1823,8 @@ async def get_admin_cache_stats(user_id: int = Query(...), db: Session = Depends
         
     return get_cache_stats()
 
-@app.get("/api/admin/users")
-async def get_admin_users(
+@app.get("/api/admin/users-lite")
+async def get_admin_users_lite(
     user_id: int = Query(...), 
     filter_type: str = Query("all"),
     db: Session = Depends(get_db)
@@ -1834,16 +1834,16 @@ async def get_admin_users(
     user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
-        
+ 
     query = db.query(User)
-    
+     
     if filter_type == 'premium':
         query = query.filter(User.is_premium == True)
     elif filter_type == 'admin':
         query = query.filter(User.is_admin == True)
-        
+ 
     users = query.limit(100).all()
-    
+     
     return {
         "users": [
             {
