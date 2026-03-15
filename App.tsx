@@ -739,7 +739,7 @@ const NewDesignApp: React.FC = () => {
 
   const handleCopyReferral = () => {
     const link = referralCode?.link || 'https://t.me/zvuklybot?start=ref';
-    const inviteText = `🎵 Присоединяйся к лучшему музыкальному боту!\n\n🎁 Получи 3 дня Premium бесплатно при регистрации!\n\n👇 Переходи по ссылке:\n${link}`;
+    const inviteText = `🎵 Присоединяйся к лучшему музыкальному боту!\n\n🎁 Получи 7 дней доступа бесплатно при регистрации!\n\n👇 Переходи по ссылке:\n${link}`;
     navigator.clipboard.writeText(inviteText);
     showToast('Реферальная ссылка скопирована');
   };

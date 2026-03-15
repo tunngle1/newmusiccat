@@ -414,7 +414,7 @@ async def notify_referrer_about_signup(referrer: User, referred_user: User):
     try:
         telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         username = referred_user.username or referred_user.first_name or "пользователь"
-        message_text = f"👥 Новый реферал!\n\n✅ @{username} присоединился по вашей ссылке\n🎁 Когда он оплатит Premium, вы получите такую же подписку!"
+        message_text = f"👥 Новый реферал!\n\n✅ @{username} присоединился по вашей ссылке\n🎁 Если он впервые купит подписку, вы получите Premium на такой же срок."
 
         async with httpx.AsyncClient() as client:
             await client.post(telegram_url, json={
@@ -465,7 +465,7 @@ async def auth_user(user_data: UserAuth, db: Session = Depends(get_db)):
         is_new_user = True
         # Новый пользователь - создаем с пробным периодом
         now = datetime.utcnow()
-        trial_expires = now + timedelta(days=3)
+        trial_expires = now + timedelta(days=7)
         
         user = User(
             id=user_data.id,
@@ -2567,8 +2567,8 @@ async def complete_payment(
             referrer = db.query(User).filter(User.id == referral.referrer_id).first()
             
             if referrer:
-                # Give 30 days premium to referrer
-                referrer_expires = extend_premium(referrer, 30, db)
+                # Give the referrer the same duration as the invited user's first purchased subscription
+                referrer_expires = extend_premium(referrer, days, db)
                 
                 # Update referral status
                 referral.status = 'completed'
@@ -2590,7 +2590,7 @@ async def complete_payment(
                                 'chat_id': referrer.id,
                                 'text': f"💎 <b>Бонус получен!</b>\n\n"
                                         f"{referred_name} оформил подписку!\n"
-                                        f"Вы получили +30 дней Premium до {referrer_expires.strftime('%d.%m.%Y')}!",
+                                        f"Вы получили Premium до {referrer_expires.strftime('%d.%m.%Y')} на такой же срок, как и его подписка!",
                                 'parse_mode': 'HTML'
                             })
                     except Exception as e:
