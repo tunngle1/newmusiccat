@@ -409,6 +409,7 @@ def can_forward_from_chat(user: User) -> bool:
 
 async def notify_referrer_about_signup(referrer: User, referred_user: User):
     if not BOT_TOKEN:
+        print(f"ℹ️ Referral signup notification skipped: BOT_TOKEN is not set for referrer={referrer.id}, referred={referred_user.id}")
         return
 
     try:
@@ -417,15 +418,20 @@ async def notify_referrer_about_signup(referrer: User, referred_user: User):
         message_text = f"👥 Новый реферал!\n\n✅ @{username} присоединился по вашей ссылке\n🎁 Если он впервые купит подписку, вы получите Premium на такой же срок."
 
         async with httpx.AsyncClient() as client:
-            await client.post(telegram_url, json={
+            response = await client.post(telegram_url, json={
                 'chat_id': referrer.id,
                 'text': message_text
             })
+            if response.status_code >= 400:
+                print(f"❌ Failed to send referral notification: status={response.status_code}, body={response.text}, referrer={referrer.id}, referred={referred_user.id}")
+            else:
+                print(f"✅ Referral signup notification sent to referrer={referrer.id} for referred={referred_user.id}")
     except Exception as e:
         print(f"❌ Failed to send referral notification: {e}")
 
 async def register_referral_relationship(db: Session, user: User, referrer: User) -> bool:
     if referrer.id == user.id:
+        print(f"ℹ️ Referral skipped: self-referral attempt user={user.id}")
         return False
 
     existing_referral = db.query(Referral).filter(
@@ -436,6 +442,7 @@ async def register_referral_relationship(db: Session, user: User, referrer: User
         if not user.referred_by:
             user.referred_by = referrer.id
             db.commit()
+        print(f"ℹ️ Referral already exists for referred={user.id}, existing_referrer={existing_referral.referrer_id}")
         return False
 
     user.referred_by = referrer.id
@@ -447,6 +454,7 @@ async def register_referral_relationship(db: Session, user: User, referrer: User
     )
     db.add(referral)
     db.commit()
+    print(f"✅ Referral relationship stored: referrer={referrer.id}, referred={user.id}")
 
     await notify_referrer_about_signup(referrer, user)
     return True
@@ -457,6 +465,7 @@ async def register_referral_relationship(db: Session, user: User, referrer: User
 async def auth_user(user_data: UserAuth, db: Session = Depends(get_db)):
     """Регистрация или обновление данных пользователя"""
     from datetime import timedelta
+    print(f"ℹ️ auth_user called for user_id={user_data.id}, referrer_id={user_data.referrer_id}")
     
     user = db.query(User).filter(User.id == user_data.id).first()
     is_new_user = False
@@ -477,6 +486,7 @@ async def auth_user(user_data: UserAuth, db: Session = Depends(get_db)):
         )
         db.add(user)
         db.commit()
+        print(f"✅ New user created user_id={user.id}")
         
         # РЕФЕРАЛЬНАЯ СИСТЕМА: Обработка реферальной ссылки
         if hasattr(user_data, 'referrer_id') and user_data.referrer_id:
@@ -486,6 +496,8 @@ async def auth_user(user_data: UserAuth, db: Session = Depends(get_db)):
                     created = await register_referral_relationship(db, user, referrer)
                     if created:
                         print(f"✅ Referral created: {referrer.id} invited {user.id}")
+                else:
+                    print(f"ℹ️ Referrer not found for referrer_id={user_data.referrer_id}, user_id={user.id}")
             except Exception as e:
                 print(f"❌ Error processing referral: {e}")
     
@@ -719,7 +731,7 @@ async def get_activity_stats(
         func.count(User.id).label('count')
     ).group_by('date').order_by('date').limit(days).all()
     
-    return [ActivityStat(date=s.date, count=s.count) for s in stats]
+    return [ActivityStat(date=str(s.date), count=s.count) for s in stats]
 
 @app.get("/api/admin/users", response_model=UserListResponse)
 async def get_users(user_id: int = Query(...), filter_type: str = Query("all"), db: Session = Depends(get_db)):
@@ -2429,6 +2441,7 @@ async def register_referral(
     """Register a new user as referred by someone"""
     normalized_referral_code = referral_code.strip()
     referrer = None
+    print(f"ℹ️ register_referral called for user_id={user_id}, referral_code={normalized_referral_code}")
 
     if normalized_referral_code.startswith('ref_'):
         try:
@@ -2447,18 +2460,22 @@ async def register_referral(
         referrer = db.query(User).filter(User.referral_code == normalized_referral_code).first()
     
     if not referrer:
+        print(f"ℹ️ register_referral failed: invalid code={normalized_referral_code} for user_id={user_id}")
         raise HTTPException(status_code=400, detail="Invalid referral code")
     
     if referrer.id == user_id:
+        print(f"ℹ️ register_referral failed: self-referral user_id={user_id}")
         raise HTTPException(status_code=400, detail="Cannot refer yourself")
     
     # Get or create user
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
+        print(f"ℹ️ register_referral failed: user not found user_id={user_id}")
         raise HTTPException(status_code=404, detail="User not found")
     
     created = await register_referral_relationship(db, user, referrer)
     if not created:
+        print(f"ℹ️ register_referral skipped: already registered user_id={user_id}, referrer_id={referrer.id}")
         raise HTTPException(status_code=400, detail="Referral already registered")
     
     return {
