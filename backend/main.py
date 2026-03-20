@@ -6,14 +6,14 @@ from dotenv import load_dotenv
 load_dotenv()  # Загружаем переменные из .env файла
 
 from fastapi import FastAPI, HTTPException, Query, Depends, Body, BackgroundTasks, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import uvicorn
 import random
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 import json
 
