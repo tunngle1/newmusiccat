@@ -683,6 +683,183 @@ async def get_activity_stats(
         for current_date in [start_date + timedelta(days=offset) for offset in range(days)]
     ]
 
+@app.get("/api/search", response_model=SearchResponse)
+async def search_tracks(
+    request: Request,
+    q: str = Query(..., description="Поисковый запрос"),
+    limit: int = Query(20, description="Максимальное количество результатов", ge=1, le=50),
+    page: int = Query(1, description="Номер страницы", ge=1),
+    by_artist: bool = Query(False, description="Фильтровать только по артисту"),
+    by_track: bool = Query(False, description="Фильтровать только по названию трека")
+):
+    try:
+        cache_key = make_cache_key("search", {
+            "q": q,
+            "limit": limit,
+            "page": page,
+            "by_artist": by_artist,
+            "by_track": by_track
+        })
+
+        cached_data = get_from_cache(cache_key)
+        if cached_data:
+            track_models = [Track(**t) for t in cached_data["results"]]
+            return SearchResponse(
+                results=track_models,
+                count=cached_data["count"]
+            )
+
+        user_agent = request.headers.get('user-agent')
+        if by_artist or by_track:
+            all_tracks = []
+            for p in range(1, 4):
+                try:
+                    page_tracks = await parser.search(q, limit=48, page=p, user_agent=user_agent)
+                    all_tracks.extend(page_tracks)
+                    if len(page_tracks) < 20:
+                        break
+                except Exception:
+                    break
+            tracks = all_tracks
+        else:
+            tracks = await parser.search(q, limit=limit, page=page, user_agent=user_agent)
+
+        query_lower = q.lower()
+        if by_artist:
+            tracks = [track for track in tracks if query_lower in track['artist'].lower()]
+        elif by_track:
+            tracks = [track for track in tracks if query_lower in track['title'].lower()]
+
+        if by_artist or by_track:
+            start_idx = (page - 1) * limit
+            end_idx = start_idx + limit
+            tracks = tracks[start_idx:end_idx]
+
+        track_models = []
+        cacheable_results = []
+
+        for track in tracks:
+            original_url = track['url']
+            if original_url:
+                from urllib.parse import quote
+                encoded_url = quote(original_url)
+                track['url'] = f"/api/stream?url={encoded_url}"
+            track_model = Track(**track)
+            track_models.append(track_model)
+            cacheable_results.append(track_model.dict())
+
+        response_data = {
+            "results": cacheable_results,
+            "count": len(cacheable_results)
+        }
+        set_to_cache(cache_key, response_data)
+
+        return SearchResponse(
+            results=track_models,
+            count=len(track_models)
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при поиске: {str(e)}"
+        )
+
+@app.get("/api/track/{track_id}", response_model=Track)
+async def get_track(track_id: str):
+    raise HTTPException(
+        status_code=501,
+        detail="Получение трека по ID пока не реализовано. Используйте поиск."
+    )
+
+@app.get("/api/radio")
+async def get_radio_stations():
+    try:
+        cache_key = make_cache_key("radio", {})
+        cached_data = get_from_cache(cache_key)
+        if cached_data:
+            station_models = [RadioStation(**s) for s in cached_data["results"]]
+            return {
+                "results": station_models,
+                "count": cached_data["count"]
+            }
+
+        stations = parser.get_radio_stations()
+        station_models = [RadioStation(**station) for station in stations]
+
+        cacheable_data = {
+            "results": [s.dict() for s in station_models],
+            "count": len(station_models)
+        }
+        set_to_cache(cache_key, cacheable_data)
+
+        return {
+            "results": station_models,
+            "count": len(station_models)
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при получении радиостанций: {str(e)}"
+        )
+
+@app.get("/api/genre/{genre_id}")
+async def get_genre_tracks(
+    request: Request,
+    genre_id: int,
+    limit: int = Query(20, description="Максимальное количество результатов", ge=1, le=50),
+    page: int = Query(1, description="Номер страницы", ge=1)
+):
+    try:
+        cache_key = make_cache_key("genre", {
+            "genre_id": genre_id,
+            "limit": limit,
+            "page": page
+        })
+
+        cached_data = get_from_cache(cache_key)
+        if cached_data:
+            track_models = [Track(**t) for t in cached_data["results"]]
+            return {
+                "results": track_models,
+                "count": cached_data["count"],
+                "genre_id": genre_id
+            }
+
+        user_agent = request.headers.get('user-agent')
+        tracks = await parser.get_genre_tracks(genre_id, limit=limit, page=page, user_agent=user_agent)
+        track_models = []
+        cacheable_results = []
+
+        for track in tracks:
+            original_url = track['url']
+            if original_url:
+                from urllib.parse import quote
+                encoded_url = quote(original_url)
+                track['url'] = f"/api/stream?url={encoded_url}"
+            track_model = Track(**track)
+            track_models.append(track_model)
+            cacheable_results.append(track_model.dict())
+
+        response_data = {
+            "results": cacheable_results,
+            "count": len(cacheable_results)
+        }
+        set_to_cache(cache_key, response_data)
+
+        return {
+            "results": track_models,
+            "count": len(track_models),
+            "genre_id": genre_id
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при получении треков жанра: {str(e)}"
+        )
+
 @app.get("/api/admin/users", response_model=UserListResponse)
 async def get_users(user_id: int = Query(...), filter_type: str = Query("all"), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
