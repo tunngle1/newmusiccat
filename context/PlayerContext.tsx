@@ -185,19 +185,6 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // Refresh subscription status
   const refreshSubscriptionStatus = async () => {
     if (!user) return;
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/user/subscription-status?user_id=${user.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setUser(prev => prev ? {
-          ...prev,
-          subscription_status: data.subscription_status
-        } : null);
-      }
-    } catch (e) {
-      console.error('Failed to refresh subscription status:', e);
-    }
   };
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -345,23 +332,13 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               last_name: tgUser.last_name,
               auth_date: window.Telegram.WebApp.initDataUnsafe.auth_date || 0,
               hash: window.Telegram.WebApp.initDataUnsafe.hash || "",
-              referrer_id: Number.isFinite(referrerId) ? referrerId : undefined
+              referrer_id: undefined
             })
           });
           if (response.ok) {
             const data = await response.json();
             console.log("Auth response:", data); // DEBUG LOG
             setUser(data.user);
-
-            if (normalizedStartParam && data.user?.id && (!Number.isFinite(referrerId) || referrerId !== data.user.id)) {
-              try {
-                await fetch(`${API_BASE_URL}/api/referral/register?user_id=${data.user.id}&referral_code=${encodeURIComponent(normalizedStartParam)}`, {
-                  method: 'POST'
-                });
-              } catch (referralError) {
-                console.error('Referral registration fallback failed:', referralError);
-              }
-            }
           } else if (response.status === 403) {
             // User is blocked
             console.error("User is blocked");
@@ -1371,7 +1348,7 @@ export const PlayerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       downloadToChat,
       downloadPlaylistToChat,
       canDownloadToApp: () => {
-        return user?.subscription_status?.has_access || false;
+        return user ? !user.is_blocked : false;
       },
       canDownloadToChat: () => {
         return true; // Все могут скачивать в чат

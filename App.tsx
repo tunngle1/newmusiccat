@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { PlayerProvider, usePlayer } from './context/PlayerContext';
 import { NotificationProvider } from './context/NotificationContext';
 import InstallPrompt from './components/InstallPrompt';
-import SubscriptionBlocker from './components/SubscriptionBlocker';
 import {
   PlayIcon,
   PauseIcon,
@@ -41,7 +40,6 @@ import { initTelegramWebApp } from './utils/telegram';
 import { API_BASE_URL } from './constants';
 import AdminView from './views/AdminView';
 
-import SubscriptionView from './views/SubscriptionView';
 import RadioTabView from './views/RadioTabView';
 import HomeTabView from './views/HomeTabView';
 import LibraryTabView from './views/LibraryTabView';
@@ -164,7 +162,7 @@ const NewDesignApp: React.FC = () => {
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [menuView, setMenuView] = useState<'main' | 'subscription' | 'referrals'>('main');
+  const [menuView, setMenuView] = useState<'main'>('main');
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [isCoverColor, setIsCoverColor] = useState(false);
   const [recentTracks, setRecentTracks] = useState<Track[]>([]);
@@ -199,11 +197,6 @@ const NewDesignApp: React.FC = () => {
   const [youtubeTrack, setYoutubeTrack] = useState<Track | null>(null);
   const [isYoutubeLoading, setIsYoutubeLoading] = useState(false);
 
-  // Referral state
-  const [referralStats, setReferralStats] = useState<ReferralStats | null>(null);
-  const [referralCode, setReferralCode] = useState<ReferralCode | null>(null);
-  const [isReferralLoading, setIsReferralLoading] = useState(false);
-
   // Player background color state
   const [playerBgColor, setPlayerBgColor] = useState('#1a1a1a');
 
@@ -229,36 +222,6 @@ const NewDesignApp: React.FC = () => {
       setPlayerBgColor('#1a1a1a');
     }
   }, [isPlayerOpen, currentTrack, isCoverColor]);
-
-  const fetchReferralData = async () => {
-    if (!user) return;
-    setIsReferralLoading(true);
-    try {
-      const [codeRes, statsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/referral/code?user_id=${user.id}`),
-        fetch(`${API_BASE_URL}/api/referral/stats?user_id=${user.id}`)
-      ]);
-
-      if (codeRes.ok) {
-        const codeData = await codeRes.json();
-        setReferralCode(codeData);
-      }
-      if (statsRes.ok) {
-        const statsData = await statsRes.json();
-        setReferralStats(statsData);
-      }
-    } catch (error) {
-      console.error('Failed to fetch referral data:', error);
-    } finally {
-      setIsReferralLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (menuView === 'referrals' && user) {
-      fetchReferralData();
-    }
-  }, [menuView, user]);
 
   const handleSelectArtist = (artistName: string) => {
     setShowArtistSelector(false);
@@ -737,25 +700,6 @@ const NewDesignApp: React.FC = () => {
     );
   };
 
-  const handleCopyReferral = () => {
-    const link = referralCode?.link || 'https://t.me/zvuklybot?start=ref';
-    const inviteText = `🎵 Присоединяйся к лучшему музыкальному боту!\n\n🎁 Получи 7 дней доступа бесплатно при регистрации!\n\n👇 Переходи по ссылке:\n${link}`;
-    navigator.clipboard.writeText(inviteText);
-    showToast('Реферальная ссылка скопирована');
-  };
-
-  const subscriptionReason = user?.subscription_status?.reason;
-  const subscriptionExpiry = subscriptionReason === 'trial'
-    ? user?.subscription_status?.trial_expires_at
-    : user?.subscription_status?.premium_expires_at;
-  const subscriptionLabel = user?.subscription_status?.has_access
-    ? subscriptionExpiry
-      ? `${subscriptionReason === 'trial' ? 'Доступ активен' : 'Подписка активна'} до ${new Date(subscriptionExpiry).toLocaleDateString('ru')}`
-      : subscriptionReason === 'trial'
-        ? 'Доступ активен 7 дней'
-        : 'Подписка активна'
-    : 'Нет активной подписки';
-
   const handleYoutubeSearch = async () => {
     if (!youtubeLink.trim()) return;
     setIsYoutubeLoading(true);
@@ -1026,8 +970,6 @@ const NewDesignApp: React.FC = () => {
         return <div key="view-library">{renderLibrary()}</div>;
       case ViewState.ADMIN:
         return <AdminView key="view-admin" onBack={() => setActiveTab(ViewState.HOME)} />;
-      case ViewState.SUBSCRIPTION:
-        return <SubscriptionView key="view-subscription" onBack={() => setActiveTab(ViewState.HOME)} userId={user?.id} />;
       default:
         return <div key="view-home-default">{renderHome()}</div>;
     }
@@ -1035,87 +977,9 @@ const NewDesignApp: React.FC = () => {
 
   const renderMenuContent = () => {
     switch (menuView) {
-      case 'subscription':
-        return (
-          <div className="p-6 space-y-4">
-            <h3 className="text-xl font-black uppercase tracking-widest">Подписка</h3>
-            <p className="text-sm text-lebedev-gray uppercase tracking-wide">
-              {subscriptionLabel}
-            </p>
-            <button
-              onClick={() => {
-                setIsMenuOpen(false);
-                setMenuView('main');
-                setActiveTab(ViewState.SUBSCRIPTION);
-              }}
-              className="w-full p-4 bg-lebedev-white text-lebedev-black font-black uppercase tracking-widest hover:bg-lebedev-red hover:text-white transition-colors"
-            >
-              {user?.subscription_status?.has_access ? 'Управление подпиской' : 'Оформить подписку'}
-            </button>
-          </div>
-        );
-      case 'referrals':
-        return (
-          <div className="p-6 space-y-6">
-            <h3 className="text-xl font-black uppercase tracking-widest">Рефералы</h3>
-
-            {isReferralLoading ? (
-              <div className="text-center py-8 text-lebedev-gray uppercase font-bold tracking-widest">Загрузка...</div>
-            ) : (
-              <>
-                <div className="p-4 border border-lebedev-white bg-lebedev-white/5">
-                  <div className="text-xs font-bold uppercase text-lebedev-gray mb-2">Ваша ссылка</div>
-                  <div className="font-mono text-sm break-all mb-4 text-lebedev-white">{referralCode?.link || 'Ссылка пока не загружена'}</div>
-                  <button
-                    onClick={handleCopyReferral}
-                    className="w-full p-3 bg-lebedev-white text-lebedev-black font-black uppercase tracking-widest hover:bg-lebedev-red hover:text-white transition-colors inline-flex items-center justify-center gap-2"
-                  >
-                    <CopyIcon className="w-5 h-5" /> Скопировать
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3 border border-lebedev-white/20 text-center">
-                    <div className="text-2xl font-black">{referralStats?.total_referrals || 0}</div>
-                    <div className="text-[10px] uppercase font-bold text-lebedev-gray">Всего</div>
-                  </div>
-                  <div className="p-3 border border-lebedev-white/20 text-center">
-                    <div className="text-2xl font-black text-green-500">{referralStats?.completed_referrals || 0}</div>
-                    <div className="text-[10px] uppercase font-bold text-lebedev-gray">Активных</div>
-                  </div>
-                  <div className="p-3 border border-lebedev-white/20 text-center">
-                    <div className="text-2xl font-black text-yellow-500">{referralStats?.pending_referrals || 0}</div>
-                    <div className="text-[10px] uppercase font-bold text-lebedev-gray">Ожидают</div>
-                  </div>
-                </div>
-
-                {referralStats?.referrals && referralStats.referrals.length > 0 && (
-                  <div>
-                    <div className="text-sm font-black uppercase tracking-widest mb-3">Ваши рефералы</div>
-                    <div className="space-y-2">
-                      {referralStats.referrals.map((ref) => (
-                        <div key={ref.id} className="p-3 border border-lebedev-white/10 flex justify-between items-center">
-                          <div>
-                            <div className="font-bold text-sm">{ref.first_name || ref.username || `User ${ref.user_id}`}</div>
-                            <div className="text-xs text-lebedev-gray">{ref.username ? `@${ref.username}` : ''}</div>
-                          </div>
-                          <div className={`text-xs font-bold uppercase px-2 py-1 ${ref.status === 'completed' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'}`}>
-                            {ref.status === 'completed' ? 'Активен' : 'Ожидает'}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        );
       default:
         return (
           <div className="py-2">
-            <MenuButton icon={StarIcon} label="Подписка" onClick={() => setMenuView('subscription')} />
-            <MenuButton icon={UsersIcon} label="Рефералы" onClick={() => setMenuView('referrals')} />
             {user?.is_admin && (
               <MenuButton
                 icon={LockIcon}
@@ -1677,10 +1541,6 @@ const NewDesignApp: React.FC = () => {
     );
   };
 
-  if (!hasAccess) {
-    return <SubscriptionBlocker user={user} onRefresh={refreshSubscriptionStatus} />;
-  }
-
   return (
     <div className="fixed inset-0 bg-lebedev-black text-lebedev-white font-sans flex justify-center">
       <div className="relative w-full max-w-[480px] h-full flex flex-col overflow-hidden">
@@ -1701,7 +1561,7 @@ const NewDesignApp: React.FC = () => {
           <div className="text-xs font-black uppercase tracking-widest text-center">{toastMessage}</div>
         </div>
 
-        {activeTab !== ViewState.ADMIN && activeTab !== ViewState.SUBSCRIPTION && (
+        {activeTab !== ViewState.ADMIN && (
           <header className="p-4 pt-6 border-b-2 border-lebedev-white flex justify-between items-center bg-lebedev-black z-20 shrink-0">
             <h1 className="text-3xl font-black tracking-tighter uppercase leading-none flex items-center gap-1 relative">
               {activeTab === ViewState.HOME ? (
@@ -1833,7 +1693,7 @@ const NewDesignApp: React.FC = () => {
             </div>
           )}
 
-          {activeTab !== ViewState.ADMIN && activeTab !== ViewState.SUBSCRIPTION && (
+          {activeTab !== ViewState.ADMIN && (
             <nav
               className="h-16 border-t-2 border-lebedev-white grid grid-cols-5 pb-safe shadow-[0_-12px_32px_rgba(0,0,0,0.65)] transition-colors duration-700"
               style={{

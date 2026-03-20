@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Users, Star, Activity, ArrowLeft, Database, RefreshCw, Trash2, Crown, Ban, Zap, Plus, Loader, CheckCircle } from 'lucide-react';
+import { Shield, Users, Activity, ArrowLeft, Database, RefreshCw, Crown, Loader, CheckCircle } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { API_BASE_URL } from '../constants';
-import { UserStats, UserListItem, Transaction, PromoCode, TopUser, ActivityStat, CacheStats } from '../types';
+import { UserStats, UserListItem, TopUser, ActivityStat, CacheStats } from '../types';
 
 interface AdminViewProps {
     onBack: () => void;
 }
 
-type TabType = 'overview' | 'all' | 'premium' | 'admins' | 'transactions' | 'promocodes' | 'broadcast' | 'top_users';
+type TabType = 'overview' | 'all' | 'admins' | 'broadcast' | 'top_users';
 
 const SUPER_ADMIN_ID = 414153884;
 
@@ -35,27 +35,18 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
         sample_keys: []
     });
     const [allUsers, setAllUsers] = useState<UserListItem[]>([]);
-    const [premiumUsers, setPremiumUsers] = useState<UserListItem[]>([]);
     const [adminUsers, setAdminUsers] = useState<UserListItem[]>([]);
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
     const [topUsers, setTopUsers] = useState<TopUser[]>([]);
     const [activityStats, setActivityStats] = useState<ActivityStat[]>([]);
 
     // UI state
     const [isLoading, setIsLoading] = useState(true);
     const [targetId, setTargetId] = useState('');
-    const [grantType, setGrantType] = useState<'admin' | 'premium' | 'premium_pro'>('premium');
+    const [grantType, setGrantType] = useState<'admin'>('admin');
     const [grantValue, setGrantValue] = useState(true);
     const [broadcastMessage, setBroadcastMessage] = useState('');
     const [isBroadcasting, setIsBroadcasting] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
-    const [newPromo, setNewPromo] = useState({
-        code: '',
-        discount_type: 'percent',
-        value: 0,
-        max_uses: 0
-    });
 
     useEffect(() => {
         if (!user?.is_admin) {
@@ -68,10 +59,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
 
     useEffect(() => {
         if (activeTab === 'all' && allUsers.length === 0) loadAllUsers();
-        else if (activeTab === 'premium' && premiumUsers.length === 0) loadPremiumUsers();
         else if (activeTab === 'admins' && adminUsers.length === 0) loadAdminUsers();
-        else if (activeTab === 'transactions' && transactions.length === 0) loadTransactions();
-        else if (activeTab === 'promocodes' && promoCodes.length === 0) loadPromoCodes();
         else if (activeTab === 'top_users' && topUsers.length === 0) loadTopUsers();
         else if (activeTab === 'overview') loadActivityStats();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -113,18 +101,6 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
         }
     };
 
-    const loadPremiumUsers = async () => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/admin/users?user_id=${user?.id}&filter_type=premium`);
-            if (response.ok) {
-                const data = await response.json();
-                setPremiumUsers(data.users);
-            }
-        } catch (error) {
-            console.error('Failed to load premium users:', error);
-        }
-    };
-
     const loadAdminUsers = async () => {
         try {
             const response = await fetch(`${API_BASE_URL}/api/admin/users?user_id=${user?.id}&filter_type=admin`);
@@ -134,27 +110,6 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
             }
         } catch (error) {
             console.error('Failed to load admin users:', error);
-        }
-    };
-
-    const loadTransactions = async () => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/admin/transactions?user_id=${user?.id}`);
-            if (response.ok) {
-                const data = await response.json();
-                setTransactions(data.transactions);
-            }
-        } catch (error) {
-            console.error('Failed to load transactions:', error);
-        }
-    };
-
-    const loadPromoCodes = async () => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/admin/promocodes?user_id=${user?.id}`);
-            if (response.ok) setPromoCodes(await response.json());
-        } catch (error) {
-            console.error('Failed to load promo codes:', error);
         }
     };
 
@@ -203,56 +158,6 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
         setIsBroadcasting(false);
     };
 
-    const generatePromoCode = () => {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        let result = 'PROMO-';
-        for (let i = 0; i < 6; i++) {
-            result += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        setNewPromo({ ...newPromo, code: result });
-    };
-
-    const handleCreatePromo = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/admin/promocodes?user_id=${user?.id}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newPromo)
-            });
-            if (response.ok) {
-                showMessage('success', 'Промокод создан');
-                setNewPromo({
-                    code: '',
-                    discount_type: 'percent',
-                    value: 0,
-                    max_uses: 0
-                });
-                loadPromoCodes();
-            } else {
-                const error = await response.json();
-                showMessage('error', error.detail || 'Ошибка создания');
-            }
-        } catch (error) {
-            showMessage('error', 'Ошибка сети');
-        }
-    };
-
-    const handleDeletePromo = async (id: number) => {
-        if (!confirm('Удалить промокод?')) return;
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/admin/promocodes/${id}?user_id=${user?.id}`, {
-                method: 'DELETE'
-            });
-            if (response.ok) {
-                showMessage('success', 'Промокод удален');
-                loadPromoCodes();
-            }
-        } catch (error) {
-            showMessage('error', 'Ошибка удаления');
-        }
-    };
-
     const handleResetCache = async () => {
         try {
             const response = await fetch(`${API_BASE_URL}/api/admin/cache/reset?admin_id=${user?.id}`, {
@@ -275,8 +180,6 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
         try {
             const body: any = { user_id: parseInt(targetId) };
             if (grantType === 'admin') body.is_admin = grantValue;
-            if (grantType === 'premium') body.is_premium = grantValue;
-            if (grantType === 'premium_pro') body.is_premium_pro = grantValue;
 
             const response = await fetch(`${API_BASE_URL}/api/admin/grant?admin_id=${user.id}`, {
                 method: 'POST',
@@ -290,7 +193,6 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                 loadStats();
                 // Reload relevant lists
                 if (activeTab === 'all') loadAllUsers();
-                if (activeTab === 'premium') loadPremiumUsers();
                 if (activeTab === 'admins') loadAdminUsers();
             } else {
                 const errorData = await response.json();
@@ -301,14 +203,13 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
         }
     };
 
-    const handleRemoveRight = async (userId: number, rightType: 'admin' | 'premium') => {
+    const handleRemoveRight = async (userId: number, rightType: 'admin') => {
         if (!user) return;
         if (!confirm('Вы уверены?')) return;
 
         try {
             const body: any = { user_id: userId };
             if (rightType === 'admin') body.is_admin = false;
-            if (rightType === 'premium') body.is_premium = false;
 
             const response = await fetch(`${API_BASE_URL}/api/admin/grant?admin_id=${user.id}`, {
                 method: 'POST',
@@ -318,8 +219,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
 
             if (response.ok) {
                 showMessage('success', `Права успешно отозваны`);
-                if (rightType === 'premium') loadPremiumUsers();
-                else loadAdminUsers();
+                loadAdminUsers();
                 loadStats();
             } else {
                 const errorData = await response.json();
@@ -344,23 +244,18 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
 
                 <div className="bg-black border-2 border-white p-4">
                     <div className="flex items-center gap-2 mb-2">
-                        <Star className="w-5 h-5 text-red-500" />
-                        <div className="text-xs text-gray-400 uppercase">Premium</div>
+                        <Shield className="w-5 h-5 text-red-500" />
+                        <div className="text-xs text-gray-400 uppercase">Администраторы</div>
                     </div>
-                    <div className="text-3xl font-black text-red-500">{stats.premium_users.toLocaleString()}</div>
+                    <div className="text-3xl font-black text-red-500">{stats.admin_users.toLocaleString()}</div>
                 </div>
 
                 <div className="bg-black border-2 border-white p-4 col-span-2">
                     <div className="flex items-center gap-2 mb-2">
-                        <Zap className="w-5 h-5 text-red-500" />
-                        <div className="text-xs text-gray-400 uppercase">Выручка</div>
+                        <Activity className="w-5 h-5 text-red-500" />
+                        <div className="text-xs text-gray-400 uppercase">Новые пользователи сегодня</div>
                     </div>
-                    <div className="flex justify-between items-end">
-                        <div className="text-xl font-black">
-                            {stats.total_revenue_ton.toFixed(1)} TON / {stats.total_revenue_stars.toLocaleString()} ★
-                        </div>
-                        <div className="text-xs text-green-500 font-bold">{stats.total_revenue_rub.toLocaleString()} ₽</div>
-                    </div>
+                    <div className="text-xl font-black">{stats.new_users_today.toLocaleString()}</div>
                 </div>
             </div>
 
@@ -429,17 +324,17 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                             {u.is_admin && u.id !== SUPER_ADMIN_ID && <Shield className="w-4 h-4 text-red-500" />}
                         </div>
                         <div className="text-[10px] text-gray-400 uppercase font-mono">
-                            {u.is_premium ? 'PREMIUM' : 'FREE'} • ID: {u.id}
+                            {u.is_admin ? 'ADMIN' : 'USER'} • ID: {u.id}
                         </div>
                     </div>
                     {u.id !== SUPER_ADMIN_ID && (
                         <div className="flex gap-2">
-                            {u.is_premium && (
+                            {u.is_admin && (
                                 <button
-                                    onClick={() => handleRemoveRight(u.id, 'premium')}
+                                    onClick={() => handleRemoveRight(u.id, 'admin')}
                                     className="px-3 py-1 border border-white text-[10px] font-bold hover:bg-white hover:text-black uppercase transition-colors"
                                 >
-                                    UNSUB
+                                    UNADMIN
                                 </button>
                             )}
                             <button className="px-3 py-1 border border-gray-600 text-gray-400 text-[10px] font-bold hover:bg-red-500 hover:text-white uppercase transition-colors">
@@ -486,11 +381,9 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
             <div className="flex gap-4">
                 <select
                     value={grantType}
-                    onChange={(e) => setGrantType(e.target.value as 'admin' | 'premium' | 'premium_pro')}
+                    onChange={(e) => setGrantType(e.target.value as 'admin')}
                     className="flex-1 bg-black border-2 border-white p-3 text-sm uppercase focus:border-red-500 outline-none font-bold"
                 >
-                    <option value="premium">PREMIUM</option>
-                    <option value="premium_pro">PREMIUM PRO</option>
                     <option value="admin">ADMIN</option>
                 </select>
                 <select
@@ -534,10 +427,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                 {[
                     { id: 'overview', label: 'Обзор', icon: Activity },
                     { id: 'all', label: 'Все', icon: Users },
-                    { id: 'premium', label: 'Premium', icon: Star },
                     { id: 'admins', label: 'Админы', icon: Shield },
-                    { id: 'transactions', label: 'Платежи', icon: Zap },
-                    { id: 'promocodes', label: 'Промо', icon: Plus },
                     { id: 'broadcast', label: 'Рассылка', icon: CheckCircle },
                     { id: 'top_users', label: 'Топ', icon: Crown }
                 ].map(tab => {
@@ -571,105 +461,8 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                                 <div className="mt-6">{renderUserList(allUsers, 'Все пользователи')}</div>
                             </>
                         )}
-                        {activeTab === 'premium' && renderUserList(premiumUsers, 'Premium пользователи')}
                         {activeTab === 'admins' && renderUserList(adminUsers, 'Администраторы')}
                         {activeTab === 'broadcast' && renderBroadcast()}
-                        {activeTab === 'transactions' && (
-                            <div className="space-y-2">
-                                {transactions.map(t => (
-                                    <div key={t.id} className="bg-black border border-white/20 p-4">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div className="font-bold">#{t.id} • User {t.user_id}</div>
-                                            <div className={`text-xs font-bold uppercase ${t.status === 'completed' ? 'text-green-500' : 'text-yellow-500'}`}>
-                                                {t.status}
-                                            </div>
-                                        </div>
-                                        <div className="text-sm text-gray-400">
-                                            {t.amount} {t.currency} • {t.plan}
-                                        </div>
-                                        <div className="text-xs text-gray-600 mt-1">{new Date(t.created_at).toLocaleString('ru')}</div>
-                                    </div>
-                                ))}
-                                {transactions.length === 0 && <div className="text-center text-gray-500 py-8">Нет транзакций</div>}
-                            </div>
-                        )}
-                        {activeTab === 'promocodes' && (
-                            <div className="space-y-6">
-                                <div className="bg-black border-2 border-white p-6">
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h3 className="text-lg font-bold uppercase">Создать промокод</h3>
-                                        <button
-                                            onClick={generatePromoCode}
-                                            className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg text-white transition-colors uppercase font-bold"
-                                        >
-                                            🎲 Сгенерировать
-                                        </button>
-                                    </div>
-                                    <form onSubmit={handleCreatePromo} className="space-y-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">Код</label>
-                                            <input
-                                                type="text"
-                                                value={newPromo.code}
-                                                onChange={(e) => setNewPromo({ ...newPromo, code: e.target.value.toUpperCase() })}
-                                                className="w-full bg-black border-2 border-white p-3 text-sm uppercase placeholder-gray-600 focus:border-red-500 outline-none font-bold"
-                                                placeholder="SUMMER2025"
-                                                required
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">Тип скидки</label>
-                                                <select
-                                                    value={newPromo.discount_type}
-                                                    onChange={(e) => setNewPromo({ ...newPromo, discount_type: e.target.value })}
-                                                    className="w-full bg-black border-2 border-white p-3 text-sm uppercase focus:border-red-500 outline-none font-bold"
-                                                >
-                                                    <option value="percent">Процент (%)</option>
-                                                    <option value="fixed">Фиксированная (RUB)</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">Значение</label>
-                                                <input
-                                                    type="number"
-                                                    value={newPromo.value}
-                                                    onChange={(e) => setNewPromo({ ...newPromo, value: parseInt(e.target.value) })}
-                                                    className="w-full bg-black border-2 border-white p-3 text-sm uppercase placeholder-gray-600 focus:border-red-500 outline-none font-bold"
-                                                    required
-                                                />
-                                            </div>
-                                        </div>
-                                        <button
-                                            type="submit"
-                                            className="w-full bg-white text-black p-4 font-black uppercase hover:bg-red-500 hover:text-white transition-colors"
-                                        >
-                                            Создать промокод
-                                        </button>
-                                    </form>
-                                </div>
-
-                                <div className="space-y-2">
-                                    {promoCodes.map(p => (
-                                        <div key={p.id} className="bg-black border border-white/20 p-4 flex justify-between items-center">
-                                            <div>
-                                                <div className="font-bold text-lg">{p.code}</div>
-                                                <div className="text-xs text-gray-400">
-                                                    {p.value}% скидка • {p.used_count}/{p.max_uses} использований
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={() => handleDeletePromo(p.id)}
-                                                className="p-2 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
-                                            >
-                                                <Trash2 className="w-5 h-5" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                    {promoCodes.length === 0 && <div className="text-center text-gray-500 py-8">Нет активных промокодов</div>}
-                                </div>
-                            </div>
-                        )}
                         {activeTab === 'top_users' && (
                             <div className="space-y-2">
                                 {topUsers.map((u, i) => (
@@ -678,7 +471,6 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
                                         <div className="flex-1">
                                             <div className="font-bold flex items-center gap-2">
                                                 @{u.username || u.id}
-                                                {u.is_premium && <Star className="w-4 h-4 text-red-500" />}
                                             </div>
                                             <div className="text-xs text-gray-400">{u.download_count} скачиваний</div>
                                         </div>

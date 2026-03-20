@@ -101,29 +101,10 @@ async def stars_transactions(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("Не удалось получить Stars-транзакции.")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка команды /start с реферальным кодом"""
+    """Обработка команды /start"""
     user = update.effective_user
-    
-    # Проверяем, есть ли start параметр (реферальный код)
-    referral_code = None
-    if context.args and len(context.args) > 0:
-        referral_code = context.args[0]
-        
-        if referral_code.startswith('REF') or referral_code.startswith('ref_'):
-            welcome_text = (
-                f"🎉 Добро пожаловать, {user.first_name}!\n\n"
-                f"Вы перешли по реферальной ссылке.\n"
-                f"Откройте приложение, чтобы завершить регистрацию и активировать бонусы."
-            )
-        else:
-            welcome_text = f"👋 Добро пожаловать, {user.first_name}!"
-    else:
-        welcome_text = f"👋 Добро пожаловать, {user.first_name}!"
-    
+    welcome_text = f"👋 Добро пожаловать, {user.first_name}!"
     webapp_url = WEBAPP_URL
-    if referral_code:
-        separator = '&' if '?' in WEBAPP_URL else '?'
-        webapp_url = f"{WEBAPP_URL}{separator}startapp={referral_code}&start={referral_code}"
     
     # Отправляем кнопку для открытия Mini App
     keyboard = [[
@@ -142,133 +123,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def premium_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать статус премиума"""
-    user_id = update.effective_user.id
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{API_BASE_URL}/api/user/subscription-status?user_id={user_id}"
-            )
-            
-            if response.status_code == 200:
-                payload = response.json()
-                data = payload.get('subscription_status', {})
-                
-                if data.get('has_access'):
-                    reason = data.get('reason')
-                    
-                    if reason == 'admin':
-                        status_text = "👑 <b>Статус: Администратор</b>\n\nУ вас полный доступ ко всем функциям."
-                    elif reason == 'premium_pro':
-                        expires = data.get('premium_expires_at')
-                        if expires:
-                            from datetime import datetime
-                            exp_date = datetime.fromisoformat(expires.replace('Z', '+00:00'))
-                            days_left = (exp_date - datetime.now()).days
-                            status_text = (
-                                f"💎 <b>Статус: Premium Pro</b>\n\n"
-                                f"Активен до: {exp_date.strftime('%d.%m.%Y')}\n"
-                                f"Осталось дней: {days_left}"
-                            )
-                        else:
-                            status_text = "💎 <b>Статус: Premium Pro</b>\n\nПодписка активна."
-                    elif reason == 'premium':
-                        expires = data.get('premium_expires_at')
-                        if expires:
-                            from datetime import datetime
-                            exp_date = datetime.fromisoformat(expires.replace('Z', '+00:00'))
-                            days_left = (exp_date - datetime.now()).days
-                            status_text = (
-                                f"⭐ <b>Статус: Premium</b>\n\n"
-                                f"Активен до: {exp_date.strftime('%d.%m.%Y')}\n"
-                                f"Осталось дней: {days_left}"
-                            )
-                        else:
-                            status_text = "⭐ <b>Статус: Premium</b>\n\nПодписка активна."
-                    elif reason == 'trial':
-                        expires = data.get('trial_expires_at')
-                        if expires:
-                            from datetime import datetime
-                            exp_date = datetime.fromisoformat(expires.replace('Z', '+00:00'))
-                            days_left = (exp_date - datetime.now()).days
-                            status_text = (
-                                f"🎁 <b>Статус: Пробный период</b>\n\n"
-                                f"Активен до: {exp_date.strftime('%d.%m.%Y')}\n"
-                                f"Осталось дней: {days_left}"
-                            )
-                        else:
-                            status_text = "🎁 <b>Статус: Пробный период</b>"
-                    else:
-                        status_text = "✅ <b>Доступ активен</b>"
-                else:
-                    status_text = (
-                        "❌ <b>Нет активной подписки</b>\n\n"
-                        "Оформите Premium для полного доступа к функциям!"
-                    )
-                
-                await update.message.reply_text(status_text, parse_mode='HTML')
-            else:
-                await update.message.reply_text("Ошибка при получении статуса подписки.")
-    except Exception as e:
-        print(f"Error getting premium status: {e}")
-        await update.message.reply_text("Ошибка при получении статуса подписки.")
+    await update.message.reply_text("Эта команда сейчас недоступна.")
 
 
 async def referral_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать статистику рефералов"""
-    user_id = update.effective_user.id
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            # Получаем реферальный код
-            code_response = await client.get(
-                f"{API_BASE_URL}/api/referral/code?user_id={user_id}"
-            )
-            
-            # Получаем статистику
-            stats_response = await client.get(
-                f"{API_BASE_URL}/api/referral/stats?user_id={user_id}"
-            )
-            
-            if code_response.status_code == 200 and stats_response.status_code == 200:
-                code_data = code_response.json()
-                stats_data = stats_response.json()
-                
-                referral_link = code_data.get('link')
-                total = stats_data.get('total_referrals', 0)
-                completed = stats_data.get('completed_referrals', 0)
-                pending = stats_data.get('pending_referrals', 0)
-                
-                stats_text = (
-                    f"🎁 <b>Реферальная программа</b>\n\n"
-                    f"Ваша ссылка:\n<code>{referral_link}</code>\n\n"
-                    f"📊 Статистика:\n"
-                    f"• Всего рефералов: {total}\n"
-                    f"• Активных: {completed} 💎\n"
-                    f"• Ожидают: {pending} ⏳\n\n"
-                    f"Приглашённый получает 7 дней доступа, а вы — Premium на срок его первой оплаченной подписки."
-                )
-                
-                # Кнопка для шаринга
-                keyboard = [[
-                    InlineKeyboardButton(
-                        "📤 Поделиться ссылкой",
-                        url=f"https://t.me/share/url?url={referral_link}&text=🎵 Присоединяйся к лучшему музыкальному боту!"
-                    )
-                ]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                await update.message.reply_text(
-                    stats_text,
-                    parse_mode='HTML',
-                    reply_markup=reply_markup
-                )
-            else:
-                await update.message.reply_text("Ошибка при получении статистики.")
-    except Exception as e:
-        print(f"Error getting referral stats: {e}")
-        await update.message.reply_text("Ошибка при получении статистики.")
+    await update.message.reply_text("Эта команда сейчас недоступна.")
 
 
 async def send_notification(user_id: int, message: str):
