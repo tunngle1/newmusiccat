@@ -1066,7 +1066,7 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
             'title': request.track.title,
             'performer': request.track.artist,
             'duration': request.track.duration if request.track.duration > 0 else None,
-            'caption': 'Отправлено из приложения Zvukly',
+            'caption': 'Отправлено из приложения @zvuklybot',
             'protect_content': False
         }
         
@@ -1217,7 +1217,7 @@ async def youtube_download_to_chat(request: dict, db: Session = Depends(get_db))
                 'chat_id': user_id,
                 'title': track_title,
                 'performer': track_artist,
-                'caption': 'Отправлено из приложения Zvukly',
+                'caption': 'Отправлено из приложения @zvuklybot',
                 'protect_content': False
             }
             
