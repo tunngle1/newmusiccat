@@ -12,9 +12,11 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import uvicorn
 import random
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
+from starlette.background import BackgroundTask
 import json
 
 try:
