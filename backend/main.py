@@ -875,7 +875,7 @@ async def stream_audio_proxy(request: Request, url: str = Query(..., description
         print(f"Using proxy for stream: {proxy}")
 
     timeout = httpx.Timeout(30.0, read=120.0)
-    client = httpx.AsyncClient(follow_redirects=True, timeout=timeout, proxies=proxies)
+    client = httpx.AsyncClient(follow_redirects=True, timeout=timeout, proxies=proxies, verify=False)
 
     user_agent = request.headers.get('user-agent')
     if not user_agent:
@@ -1014,7 +1014,7 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
             print(f"[DOWNLOAD_TO_CHAT] Added Hitmo headers")
         
         # 1. Download audio file from URL (увеличен timeout для больших файлов)
-        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True, verify=False) as client:
             audio_response = await client.get(audio_url, headers=headers)
             audio_response.raise_for_status()
             audio_data = audio_response.content
@@ -1050,7 +1050,7 @@ async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends
                     cover_headers['Origin'] = 'https://rus.hitmotop.com'
                 
                 print(f"[DOWNLOAD_TO_CHAT] Downloading thumbnail from: {cover_url[:100]}...")
-                async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as thumb_client:
+                async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, verify=False) as thumb_client:
                     thumb_response = await thumb_client.get(cover_url, headers=cover_headers)
                     if thumb_response.status_code == 200:
                         thumbnail_data = thumb_response.content
