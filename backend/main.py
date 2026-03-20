@@ -505,37 +505,6 @@ async def auth_user(user_data: UserAuth, db: Session = Depends(get_db)):
         }
     }
 
-# Genres endpoint
-    
-    # Формируем ответ с информацией о подписке
-    subscription_status = {
-        "has_access": has_access_result,
-        "reason": reason,
-        **details
-    }
-    
-    # Если пользователь заблокирован, возвращаем ошибку
-    if user.is_blocked:
-        raise HTTPException(
-            status_code=403, 
-            detail={
-                "message": "Access denied: User is blocked",
-                "subscription_status": subscription_status
-            }
-        )
-    
-    return {
-        "status": "ok",
-        "is_new_user": is_new_user,
-        "user": {
-            "id": user.id,
-            "is_admin": user.is_admin,
-            "is_premium": user.is_premium,
-            "is_premium_pro": user.is_premium_pro,
-            "subscription_status": subscription_status
-        }
-    }
-
 @app.get("/api/user/subscription-status")
 async def get_subscription_status(user_id: int = Query(...), db: Session = Depends(get_db)):
     """Получение детальной информации о статусе подписки"""
@@ -713,6 +682,35 @@ async def get_activity_stats(
         )
         for current_date in [start_date + timedelta(days=offset) for offset in range(days)]
     ]
+
+@app.get("/api/admin/users", response_model=UserListResponse)
+async def get_users(user_id: int = Query(...), filter_type: str = Query("all"), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    query = db.query(User)
+
+    if filter_type == "premium":
+        query = query.filter(User.is_premium == True)
+    elif filter_type == "admin":
+        query = query.filter(User.is_admin == True)
+    elif filter_type == "blocked":
+        query = query.filter(User.is_blocked == True)
+
+    users = query.order_by(User.joined_at.desc()).all()
+
+    return UserListResponse(
+        users=[UserListItem(
+            id=u.id,
+            username=u.username,
+            first_name=u.first_name,
+            last_name=u.last_name,
+            is_admin=u.is_admin,
+            is_premium=u.is_premium,
+            is_blocked=u.is_blocked
+        ) for u in users]
+    )
 
 @app.post("/api/download/chat")
 async def download_to_chat(request: DownloadToChatRequest, db: Session = Depends(get_db)):
