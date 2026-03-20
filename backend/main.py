@@ -860,6 +860,88 @@ async def get_genre_tracks(
             detail=f"Ошибка при получении треков жанра: {str(e)}"
         )
 
+@app.get("/api/stream")
+async def stream_audio_proxy(request: Request, url: str = Query(..., description="URL аудио файла")):
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required")
+
+    proxy_list_str = os.getenv("PROXY_URLS", "") or os.getenv("PROXY_LIST", "")
+    proxy_list = [p.strip() for p in proxy_list_str.split(",") if p.strip()]
+
+    proxies = None
+    if proxy_list:
+        proxy = random.choice(proxy_list)
+        proxies = {"http://": proxy, "https://": proxy}
+        print(f"Using proxy for stream: {proxy}")
+
+    timeout = httpx.Timeout(30.0, read=120.0)
+    client = httpx.AsyncClient(follow_redirects=True, timeout=timeout, proxies=proxies)
+
+    user_agent = request.headers.get('user-agent')
+    if not user_agent:
+        user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+
+    headers = {
+        'User-Agent': user_agent,
+        'Accept': '*/*',
+        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+    }
+
+    if "hitmotop.com" in url:
+        headers['Referer'] = 'https://rus.hitmotop.com/'
+        headers['Origin'] = 'https://rus.hitmotop.com'
+
+    range_header = request.headers.get("range")
+    if range_header:
+        headers['Range'] = range_header
+
+    async def close_client():
+        await client.aclose()
+
+    try:
+        req = client.build_request("GET", url, headers=headers)
+        response = await client.send(req, stream=True)
+
+        if response.status_code >= 400:
+            await client.aclose()
+            if response.status_code == 404 and "hitmotop.com" in url:
+                raise HTTPException(status_code=404, detail="Hitmo source URL expired")
+            if response.status_code in [403, 429]:
+                raise HTTPException(status_code=503, detail="Source blocked request")
+            raise HTTPException(status_code=response.status_code, detail="Upstream error")
+
+        response_headers = {
+            "Accept-Ranges": "bytes",
+        }
+
+        if "content-length" in response.headers:
+            response_headers["Content-Length"] = response.headers["content-length"]
+        if "content-range" in response.headers:
+            response_headers["Content-Range"] = response.headers["content-range"]
+        if "content-type" in response.headers:
+            response_headers["Content-Type"] = response.headers["content-type"]
+
+        download_param = request.query_params.get("download")
+        if download_param and download_param.lower() == "true":
+            filename = url.split("/")[-1] or "track.mp3"
+            if "?" in filename:
+                filename = filename.split("?")[0]
+            response_headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        return StreamingResponse(
+            response.aiter_bytes(),
+            status_code=response.status_code,
+            headers=response_headers,
+            media_type=response.headers.get("content-type"),
+            background=BackgroundTask(close_client)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        await client.aclose()
+        print(f"Error streaming audio: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=f"Stream error: {str(e)}")
+
 @app.get("/api/admin/users", response_model=UserListResponse)
 async def get_users(user_id: int = Query(...), filter_type: str = Query("all"), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
